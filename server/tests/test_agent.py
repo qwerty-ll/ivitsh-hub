@@ -49,7 +49,7 @@ def test_the_model_asks_the_timetable_and_words_the_answer(student, monkeypatch)
     )
     reply, actions = ask(student, "мне к какому часу приходить завтра")
     assert reply == "Завтра одна пара: в 13:40 лабораторная по базам данных в Б-407, это замена."
-    assert actions == [("Б-407 на карте", "/map?room=Б-407"), ("Расписание на главной", "/#schedule-section")]
+    assert actions == [("Б-407 на карте", "/map?room=Б-407"), ("Расписание", "/schedule")]
 
     first, second = sent
     assert [f["name"] for f in first["functions"]] == ["schedule", "find_room", "find_teacher", "search_portal"]

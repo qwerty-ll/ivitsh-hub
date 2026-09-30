@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
-  ChevronRight, ChevronDown, Circle, CheckCircle2, BellRing, ArrowRight, MessageCircle, LogIn, MapPin
+  ChevronRight, ChevronDown, Circle, CheckCircle2, ArrowRight, MessageCircle, LogIn, MapPin
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ScheduleWidget from '../components/ScheduleWidget';
@@ -187,12 +187,13 @@ const Dashboard = () => {
   // Onboarding tasks definition
   const initialTasks = [
     { id: 'profile-curator', text: 'Зайти в личный кабинет', route: '/profile' },
-    { id: 'schedule', text: 'Посмотреть расписание', isScheduleTrigger: true },
+    { id: 'schedule', text: 'Посмотреть расписание', route: '/schedule' },
     { id: 'faq', text: 'Посмотреть частые вопросы', route: '/faq' },
     { id: 'teachers', text: 'Посмотреть преподавателей', route: '/teachers' },
     { id: 'map', text: 'Открыть карту кампуса', route: '/map' },
     { id: 'forum', text: 'Заглянуть на форум', route: '/forum' },
-    { id: 'ads', text: 'Прочитать объявления', isAdTrigger: true },
+    // Only when there is something to read
+    ...(announcements.length ? [{ id: 'ads', text: 'Прочитать объявления', isAdTrigger: true }] : []),
   ];
 
   const [completedTaskIds, setCompletedTaskIds] = useState(() => readSteps(user?.id));
@@ -207,7 +208,7 @@ const Dashboard = () => {
 
   const markTaskDone = (taskId) => markStep(user?.id, taskId);
 
-  // "/#schedule-section" (the app shortcut, ВИТШик's "Расписание" button) opens the page at the schedule;
+  // "/#schedule-section" (the shortcut of apps installed before /schedule existed) opens the page at today's pairs;
   // after the frame, so the scroll-to-top on navigation does not undo it
   const { hash } = useLocation();
   useEffect(() => {
@@ -220,8 +221,6 @@ const Dashboard = () => {
     markTaskDone(task.id);
     if (task.route) {
       navigate(task.route);
-    } else if (task.isScheduleTrigger) {
-      document.getElementById('schedule-section')?.scrollIntoView({ behavior: 'smooth' });
     } else if (task.isAdTrigger) {
       document.getElementById('announcements-section')?.scrollIntoView({ behavior: 'smooth' });
     }
@@ -265,7 +264,7 @@ const Dashboard = () => {
           </h1>
           <div className="dash-hero-today">
             {!isLoggedIn ? (
-              <p className="dash-hero-lead">{dateLead}. Войдите через ЭИОС: портал покажет расписание вашей группы и запомнит ваши вопросы на форуме.</p>
+              <p className="dash-hero-lead">{dateLead}. Войдите через ЭИОС, чтобы видеть пары своей группы.</p>
             ) : !todaySummary ? (
               <p className="dash-hero-lead">{dateLead}. Здесь расписание, объявления и помощник ВИТШик — всё в одном месте.</p>
             ) : (
@@ -322,28 +321,21 @@ const Dashboard = () => {
       </nav>
 
       <div className="dash-grid">
-        {/* SCHEDULE */}
-        {/* Choosing a group, a date or a view counts as having looked at the schedule */}
-        <section
-          id="schedule-section"
-          className="dash-main"
-          aria-labelledby="schedule-title"
-          onClickCapture={() => markTaskDone('schedule')}
-          onChangeCapture={() => markTaskDone('schedule')}
-        >
-          <ScheduleWidget onGroupLessons={setGroupLessons} ownGroup={ownGroup} />
+        {/* TODAY: the nearest pairs; the full schedule has its own page */}
+        <section id="schedule-section" className="dash-main" aria-labelledby="schedule-title">
+          <ScheduleWidget onGroupLessons={setGroupLessons} ownGroup={ownGroup} compact />
         </section>
 
         <div className="dash-aside">
-          {/* ANNOUNCEMENTS */}
+          {/* ANNOUNCEMENTS: hidden until there are any */}
+          {announcements.length > 0 && (
           <section id="announcements-section" className="card dash-card" aria-labelledby="announcements-title">
             <div className="dash-card-head">
               <h2 id="announcements-title">Объявления</h2>
               {announcements.length > 0 && <span className="dash-card-meta tabular">{announcements.length}</span>}
             </div>
 
-            {announcements.length > 0 ? (
-              <ul className="list dash-rows">
+            <ul className="list dash-rows">
                 {announcements.map((ad) => {
                   const isExpanded = expandedAdIds.includes(ad.id);
                   const bodyId = `announcement-${ad.id}`;
@@ -376,15 +368,9 @@ const Dashboard = () => {
                     </li>
                   );
                 })}
-              </ul>
-            ) : (
-              <div className="dash-empty">
-                <BellRing size={24} {...ICON} />
-                <h3>Объявлений пока нет</h3>
-                <p>Новости института появятся здесь, как только их опубликуют.</p>
-              </div>
-            )}
+            </ul>
           </section>
+          )}
 
           {/* ONBOARDING: progress and the one next step; the full list on demand */}
           <section className="card dash-card dash-onboarding" aria-labelledby="onboarding-title">

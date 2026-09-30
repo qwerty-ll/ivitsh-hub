@@ -9,6 +9,7 @@ const keyFor = (userId) => (userId ? `portal_onboarding_${userId}` : GUEST_KEY);
 // Opening these sections from anywhere (sidebar, tab bar, links) completes the matching step.
 // ("Зайти в личный кабинет" means signing in, so App marks it for any signed-in visit instead.)
 export const ROUTE_STEPS = {
+  '/schedule': 'schedule',
   '/faq': 'faq',
   '/teachers': 'teachers',
   '/map': 'map',

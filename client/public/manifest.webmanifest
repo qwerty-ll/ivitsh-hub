@@ -18,7 +18,7 @@
     { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Расписание", "url": "/#schedule-section", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Расписание", "url": "/schedule", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Карта корпуса", "url": "/map", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Преподаватели", "url": "/teachers", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
   ]

@@ -68,7 +68,7 @@ def test_next_pair_is_computed_from_the_timetable(student):
         "Сейчас идёт Программирование на Python (практика) в Б-214, до 11:40. "
         "Следующая пара — завтра в 13:40: Базы данных (лабораторная), Б-407."
     )
-    assert ("Б-214 на карте", "/map?room=Б-214") in actions and ("Расписание на главной", "/#schedule-section") in actions
+    assert ("Б-214 на карте", "/map?room=Б-214") in actions and ("Расписание", "/schedule") in actions
 
 
 def test_pairs_on_a_day_and_follow_up(student):
@@ -316,7 +316,7 @@ def test_pairs_of_another_group_and_one_subgroup(student, two_groups):
     assert reply == ("24-ИСбо-2, 2 подгруппа:\n"
                      "Следующая пара — завтра в 08:30: Операционные системы (лабораторная) у 2 подгруппы, Б-104.")
     # The map button is the room of the asked subgroup, not the first one in the list
-    assert actions == [("Б-104 на карте", "/map?room=Б-104"), ("Расписание на главной", "/#schedule-section")]
+    assert actions == [("Б-104 на карте", "/map?room=Б-104"), ("Расписание", "/schedule")]
 
 
 def test_parallel_pairs_get_a_map_button_per_subgroup(student, two_groups):
@@ -326,7 +326,7 @@ def test_parallel_pairs_get_a_map_button_per_subgroup(student, two_groups):
                      "• 08:30–10:00 — Операционные системы, лабораторная, Б-104, 2 подгруппа\n"
                      "• 10:10–11:40 — Философия, лекция, Б-407")
     assert actions == [("Б-207 на карте (1 пг)", "/map?room=Б-207"), ("Б-104 на карте (2 пг)", "/map?room=Б-104"),
-                       ("Расписание на главной", "/#schedule-section")]
+                       ("Расписание", "/schedule")]
 
 
 def test_a_subgroup_follow_up_keeps_the_group_and_days(student, two_groups):

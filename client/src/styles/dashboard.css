@@ -753,6 +753,55 @@ a.dash-hero-room {
 .sched-empty p { font-size: var(--text-sm); max-width: 40ch; }
 .sched-empty .btn { margin-top: var(--space-2); }
 
+/* ---------- Compact "today" card on the dashboard ---------- */
+.sched-compact-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+.sched-compact-head h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  font-size: var(--text-lg);
+}
+.sched-compact-who {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  color: var(--text-2);
+}
+.sched-compact-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--touch-target);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--accent);
+  text-decoration: none;
+}
+@media (hover: hover) {
+  .sched-compact-all:hover { text-decoration: underline; text-underline-offset: 0.2em; }
+}
+.sched--compact .sched-body { margin-top: var(--space-2); gap: var(--space-2); }
+.sched--compact .sched-slot:not(.is-now) { padding: var(--space-3) 0; }
+.sched-compact-past {
+  font-size: var(--text-sm);
+  color: var(--text-3);
+}
+.sched--compact .sched-empty { padding: var(--space-6) var(--space-4) var(--space-4); }
+.sched-choice-lead { margin-top: var(--space-2); color: var(--text-2); }
+.sched-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+.sched-choice .btn { flex: 1 1 12rem; }
+
 /* ---------- Motion (user-triggered only) ---------- */
 @keyframes dash-reveal {
   from { opacity: 0; transform: translateY(-4px); }
@@ -780,6 +829,9 @@ a.dash-hero-room {
 }
 
 @media (max-width: 768px) {
+  /* Phone: today's pairs right under the greeting; the tab bar already reaches the main sections */
+  .dash { display: flex; flex-direction: column; }
+  .dash-shortcuts { order: 1; margin-top: var(--space-4); }
   .dash-grid,
   .dash-aside { gap: var(--space-4); }
 
@@ -800,20 +852,10 @@ a.dash-hero-room {
   .dash-hero-lesson-title { font-size: var(--text-base); }
 
   /* Shortcuts scroll sideways instead of stacking five rows */
-  .dash-shortcuts { margin: 0 calc(-1 * var(--space-4)) var(--space-4); }
-  .dash-shortcuts ul {
-    grid-template-columns: none;
-    grid-auto-flow: column;
-    grid-auto-columns: max-content;
-    padding: 0 var(--space-4) var(--space-1);
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    scroll-padding: 0 var(--space-4);
-    scrollbar-width: none;
-    overscroll-behavior-x: contain;
-  }
-  .dash-shortcuts ul::-webkit-scrollbar { display: none; }
-  .dash-shortcuts li { scroll-snap-align: start; }
+  /* Two by two: every section visible, nothing cut at the screen edge */
+  .dash-shortcuts { margin-bottom: var(--space-4); }
+  .dash-shortcuts ul { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+  .dash-shortcut-text { min-width: 0; }
   .dash-shortcut { padding: var(--space-2) var(--space-4) var(--space-2) var(--space-2); }
   .dash-shortcut .tile { width: 2.25rem; height: 2.25rem; }
   .dash-shortcut-hint { display: none; }

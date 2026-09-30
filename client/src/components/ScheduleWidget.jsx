@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search, MapPin, User, AlertCircle, ChevronDown, GraduationCap, Check,
-  ChevronLeft, ChevronRight, CalendarX2, CloudOff, RotateCw, Undo2
+  ChevronLeft, ChevronRight, CalendarX2, CloudOff, RotateCw, Undo2, ArrowRight
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { scheduleApi } from '../services/api';
 import { subgroupOf, cleanLessonTitle } from '../utils/lessons';
 
@@ -82,11 +82,39 @@ const readPickedGroup = () => {
   return saved?.picked ? saved : null;
 };
 
+// Whose timetable was shown last (a teacher keeps seeing their own); only kept once something was chosen
+const TYPE_KEY = 'portal_sched_type';
+const TYPE_TARGET_KEYS = { teacher: 'portal_sched_teacher', aud: 'portal_sched_aud' };
+const readJson = (key) => {
+  try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; }
+};
+const readSavedType = () => {
+  let type = null;
+  try { type = localStorage.getItem(TYPE_KEY); } catch { /* storage unavailable */ }
+  if (type === 'group') return 'group';
+  return TYPE_TARGET_KEYS[type] && readJson(TYPE_TARGET_KEYS[type])?.id ? type : null;
+};
+const saveType = (type) => {
+  try { localStorage.setItem(TYPE_KEY, type); } catch { /* storage unavailable */ }
+};
+
 // onGroupLessons({ group, lessons }) receives the loaded lessons whenever a group's schedule is shown,
 // so the dashboard can summarise today without fetching the schedule twice.
 // ownGroup ({ id, name }) is the signed-in student's group from EIOS; id may be missing for a group typed by hand.
-const ScheduleWidget = ({ onGroupLessons, ownGroup = null }) => {
-  const [targetType, setTargetType] = useState('group'); // 'group' | 'teacher' | 'aud'
+// compact: the dashboard's "today" card — no pickers, only the nearest study day of the student's group
+// (or of the teacher / room a guest chose last), with a link to the full schedule page.
+// titleHidden: the page around it already has the heading.
+const ScheduleWidget = ({ onGroupLessons, ownGroup = null, compact = false, titleHidden = false }) => {
+  const [searchParams] = useSearchParams();
+  const [targetType, setTargetType] = useState(() => {
+    const fromUrl = compact ? null : searchParams.get('type');
+    if (TARGET_TYPES.some(t => t.id === fromUrl)) return fromUrl;
+    if (compact && ownGroup?.name) return 'group';
+    return readSavedType() || 'group';
+  }); // 'group' | 'teacher' | 'aud'
+  // A guest who has not chosen anyone yet gets a choice instead of some random group's pairs
+  const needsChoice = compact && !ownGroup?.name && !readPickedGroup()
+    && !['teacher', 'aud'].includes(readSavedType());
   const availableYears = ['2025-2026', '2024-2025', '2023-2024', '2026-2027'];
 
   // Separate target selection states per category
@@ -137,10 +165,10 @@ const ScheduleWidget = ({ onGroupLessons, ownGroup = null }) => {
   }, []);
 
   // Selected date ISO string (default to today)
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => localIso(new Date()));
 
   // Academic Year State (Auto-synced with selectedDate, can also be manually selected)
-  const [selectedYear, setSelectedYear] = useState(() => calculateAcademicYear(new Date().toISOString().split('T')[0]));
+  const [selectedYear, setSelectedYear] = useState(() => calculateAcademicYear(localIso(new Date())));
 
   // Auto-sync year when user picks a new date
   const handleDateChange = (newDateIso) => {
@@ -154,6 +182,7 @@ const ScheduleWidget = ({ onGroupLessons, ownGroup = null }) => {
   // Switch category tabs and clear search input
   const handleSwitchTargetType = (newType) => {
     setTargetType(newType);
+    saveType(newType);
     setSearchQuery('');
     setIsDropdownOpen(false);
   };
@@ -234,7 +263,7 @@ const ScheduleWidget = ({ onGroupLessons, ownGroup = null }) => {
       }
     };
 
-    loadCatalog();
+    if (!needsChoice) loadCatalog();
     return () => { isMounted = false; };
   }, [targetType, selectedYear]);
 
@@ -242,6 +271,7 @@ const ScheduleWidget = ({ onGroupLessons, ownGroup = null }) => {
   const handleSelectItem = (item, { auto = false } = {}) => {
     const itemId = item.id || item.idName;
     const targetObj = { id: itemId, name: item.name };
+    if (!auto) saveType(targetType);
 
     if (targetType === 'group') {
       setSelectedGroup(targetObj);
@@ -394,8 +424,23 @@ const ScheduleWidget = ({ onGroupLessons, ownGroup = null }) => {
     return { monIso, satIso, monObj: mon, satObj: sat };
   }, [selectedDate]);
 
+  // Compact card: today while pairs are still ahead, else the next day with pairs (within two weeks)
+  const compactDate = useMemo(() => {
+    if (!compact) return null;
+    const today = localIso(now);
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const dates = [...new Set(deduplicatedLessons
+      .filter(l => l.дата && (l.дата.slice(0, 10) > today
+        || (l.дата.startsWith(today) && toMinutes(l.конец) > nowMinutes)))
+      .map(l => l.дата.slice(0, 10)))].sort();
+    const limit = new Date(now);
+    limit.setDate(limit.getDate() + 14);
+    return dates[0] && dates[0] <= localIso(limit) ? dates[0] : null;
+  }, [compact, deduplicatedLessons, now]);
+
   // Lessons filtered by view mode (Day or Week)
   const modeLessons = useMemo(() => {
+    if (compact) return compactDate ? deduplicatedLessons.filter(l => l.дата && l.дата.startsWith(compactDate)) : [];
     if (viewMode === 'day') {
       return deduplicatedLessons.filter(l => l.дата && l.дата.startsWith(selectedDate));
     }
@@ -405,7 +450,7 @@ const ScheduleWidget = ({ onGroupLessons, ownGroup = null }) => {
       const d = l.дата.split('T')[0];
       return d >= weekStartEndDates.monIso && d <= weekStartEndDates.satIso;
     });
-  }, [deduplicatedLessons, viewMode, selectedDate, weekStartEndDates]);
+  }, [compact, compactDate, deduplicatedLessons, viewMode, selectedDate, weekStartEndDates]);
 
   // Group modeLessons FIRST BY DATE, THEN BY TIME SLOT (Prevents date mixing!)
   const groupedByDateAndSlot = useMemo(() => {
@@ -462,7 +507,7 @@ const ScheduleWidget = ({ onGroupLessons, ownGroup = null }) => {
   };
 
   // ---------- Presentation-only derived values ----------
-  const todayIso = new Date().toISOString().split('T')[0]; // same expression as the default date
+  const todayIso = localIso(new Date()); // same expression as the default date
   const localTodayIso = localIso(now);
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const isOnToday = viewMode === 'day'
@@ -605,11 +650,59 @@ const ScheduleWidget = ({ onGroupLessons, ownGroup = null }) => {
     );
   };
 
+  if (needsChoice) {
+    return (
+      <div className="card sched sched--compact">
+        <div className="sched-compact-head">
+          <h2 id="schedule-title">Расписание</h2>
+        </div>
+        <p className="sched-choice-lead">Покажу здесь ближайшие пары. Чьё расписание смотреть? Для этого вход не нужен.</p>
+        <div className="sched-choice">
+          <Link to="/schedule?type=group" className="btn btn-secondary">
+            <GraduationCap size={16} {...ICON} />
+            Выбрать группу
+          </Link>
+          <Link to="/schedule?type=teacher" className="btn btn-secondary">
+            <User size={16} {...ICON} />
+            Я преподаватель
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Compact card title: the day it shows and whose pairs they are
+  const compactTitle = (() => {
+    if (!compactDate) return 'Ближайшие пары';
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (compactDate === localTodayIso) return 'Сегодня';
+    if (compactDate === localIso(tomorrow)) return 'Завтра';
+    return capitalize(new Date(`${compactDate}T00:00:00`).toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' }));
+  })();
+  const pastToday = compact && compactDate === localTodayIso
+    ? groupedByDateAndSlot[0]?.slots.filter(slot => toMinutes(slot.timeEnd) <= nowMin).length || 0
+    : 0;
+
   return (
-    <div className="card sched">
+    <div className={`card sched${compact ? ' sched--compact' : ''}`}>
+      {compact && (
+        <div className="sched-compact-head">
+          <h2 id="schedule-title">
+            {compactTitle}
+            {currentTarget?.name && <span className="sched-compact-who">{currentTarget.name}</span>}
+          </h2>
+          <Link to="/schedule" className="sched-compact-all">
+            Всё расписание
+            <ArrowRight size={16} {...ICON} />
+          </Link>
+        </div>
+      )}
+
+      {!compact && (<>
       {/* 1. TITLE & TYPE SWITCHER */}
       <div className="sched-head">
-        <h2 id="schedule-title">Расписание</h2>
+        <h2 id="schedule-title" className={titleHidden ? 'visually-hidden' : undefined}>Расписание</h2>
         <div className="segmented sched-types" role="group" aria-label="Чьё расписание показать">
           {TARGET_TYPES.map(t => (
             <button
@@ -804,6 +897,7 @@ const ScheduleWidget = ({ onGroupLessons, ownGroup = null }) => {
           )}
         </div>
       </div>
+      </>)}
 
       {staleSince && !lessonsLoading && !error && (
         <p className="sched-notice" role="status">
@@ -859,14 +953,23 @@ const ScheduleWidget = ({ onGroupLessons, ownGroup = null }) => {
         <div className="sched-body">
           {groupedByDateAndSlot.map((dGroup) => (
             <section key={dGroup.dateIso} className="sched-day" aria-labelledby={`sched-day-${dGroup.dateIso}`}>
-              <h3 className="sched-day-title" id={`sched-day-${dGroup.dateIso}`}>
-                <span>{capitalize(dGroup.weekday)}, {dGroup.dateLabel}</span>
-                {dGroup.dateIso === localTodayIso && <span className="badge badge-accent">Сегодня</span>}
-              </h3>
+              {compact ? (
+                pastToday > 0 && (
+                  <p className="sched-compact-past tabular">
+                    {pastToday === 1 ? 'Одна пара уже прошла' : `Уже прошло пар: ${pastToday}`}
+                  </p>
+                )
+              ) : (
+                <h3 className="sched-day-title" id={`sched-day-${dGroup.dateIso}`}>
+                  <span>{capitalize(dGroup.weekday)}, {dGroup.dateLabel}</span>
+                  {dGroup.dateIso === localTodayIso && <span className="badge badge-accent">Сегодня</span>}
+                </h3>
+              )}
 
               <ul className="sched-slots">
                 {dGroup.slots.map((slot, sIdx) => {
                   const state = slotState(dGroup, slot);
+                  if (compact && state === 'past') return null;
                   const isNext = sIdx === nextSlotIndex(dGroup);
                   const start = toMinutes(slot.timeStart);
                   const length = Math.max(1, toMinutes(slot.timeEnd) - start);
@@ -897,9 +1000,9 @@ const ScheduleWidget = ({ onGroupLessons, ownGroup = null }) => {
       ) : (
         <div className="sched-empty">
           <CalendarX2 size={28} {...ICON} />
-          <h3>Занятий нет</h3>
-          <p>На выбранный день или неделю пары не запланированы.</p>
-          {viewMode === 'day' && (
+          <h3>{compact ? 'Ближайших пар нет' : 'Занятий нет'}</h3>
+          <p>{compact ? 'В ближайшие две недели пары не запланированы.' : 'На выбранный день или неделю пары не запланированы.'}</p>
+          {!compact && viewMode === 'day' && (
             <button type="button" className="btn btn-secondary" onClick={() => setViewMode('week')}>
               Показать всю неделю
             </button>

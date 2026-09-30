@@ -69,7 +69,7 @@ docker compose up --build        # первый запуск собирает о
 
 - Студенты входят своей учётной записью ЭИОС КГУ: «Личный кабинет» → «Студент ЭИОС КГУ».
 - Для панели управления задайте `ADMIN_USERNAME` и `ADMIN_PASSWORD` в файле `.env` рядом с
-  `docker-compose.yml` (см. `.env.example`) и войдите через «Сотрудник ИВИТШ».
+  `docker-compose.yml` (см. `.env.example`) и войдите через «Администратор».
 - Для GigaChat задайте в том же `.env` `GIGACHAT_AUTH_KEY`; сертификаты Минцифры уже встроены.
   Проверка реальными запросами (ключ не печатается): `docker compose exec portal python -m app.services.gigachat_check`.
 

@@ -16,7 +16,7 @@ const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 
 const LOGIN_MODES = [
   { id: 'sdo', label: 'Студент ЭИОС КГУ', Icon: GraduationCap },
-  { id: 'staff', label: 'Сотрудник ИВИТШ', Icon: ShieldCheck }
+  { id: 'staff', label: 'Администратор', Icon: ShieldCheck }
 ];
 
 // Arrow-key navigation between role="tab" buttons (WAI-ARIA tabs pattern).
@@ -205,7 +205,7 @@ const Profile = () => {
             <h2 id="login-title" className="login-title">
               {isStaff ? 'Вход для администрации ИВИТШ' : 'Вход через ЭИОС КГУ'}
             </h2>
-            {isStaff && <p className="login-lead">Служебная авторизация администраторов и деканата</p>}
+            {isStaff && <p className="login-lead">Только для администраторов портала. Преподавателям вход не нужен: расписание, карта и справочник открыты всем.</p>}
 
             <form onSubmit={handleLogin} className="login-form">
               <div className="field">

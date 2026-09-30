@@ -180,7 +180,7 @@ async def _schedule(args: dict, ctx: Context) -> dict:
     else:
         group, _ = await assistant._group_for(ctx.user, ctx.group_hint, year)
         if not group:
-            return {"error": "Группа студента неизвестна: нужно войти через ЭИОС или выбрать группу в расписании на главной."}
+            return {"error": "Группа студента неизвестна: нужно войти через ЭИОС или выбрать группу в разделе «Расписание»."}
     lessons, stale = await timetable.group_lessons(group["id"], year)
 
     # Days named in the question ("завтра", "в пятницу") are read by the portal, not by the model's arithmetic
@@ -206,7 +206,7 @@ async def _schedule(args: dict, ctx: Context) -> dict:
         pool = pool[:8]
     pool = pool[:MAX_LESSONS]
 
-    ctx.actions.append(assistant.Action("Расписание на главной", "/#schedule-section"))
+    ctx.actions.append(assistant.Action("Расписание", "/schedule"))
     upcoming = next((l for l in pool if l.ends_at > ctx.now), None)
     ctx.actions[:0] = assistant._map_actions(assistant._same_slot(pool, upcoming))
     label = f"{first:%d.%m}" + (f"–{last:%d.%m}" if last and last != first else "") if first else "ближайшие дни"

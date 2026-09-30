@@ -310,7 +310,7 @@ def _schedule_answer(q: str, lessons: List[timetable.Lesson], group: str, now: d
     soon = timetable.upcoming(lessons, now, LOOKAHEAD_DAYS)
     when = parse_when(q, today)
     disciplines = _matching_disciplines(q, soon)
-    actions = [Action("Расписание на главной", "/#schedule-section")]
+    actions = [Action("Расписание", "/schedule")]
 
     def finish(text: str, focus: List[timetable.Lesson]) -> Finding:
         return Finding(text=text, actions=_map_actions(focus) + actions, exact=True, weight=100)
@@ -425,17 +425,17 @@ async def _schedule_finding(q, previous_q, user, hint, now, message: str = "") -
     except timetable.TimetableUnavailable:
         if not asked:
             return None
-        return Finding("ЭИОС сейчас не отвечает, и расписание я не вижу. Попробуй чуть позже.", [Action("Расписание на главной", "/#schedule-section")], exact=True, weight=100)
+        return Finding("ЭИОС сейчас не отвечает, и расписание я не вижу. Попробуй чуть позже.", [Action("Расписание", "/schedule")], exact=True, weight=100)
 
     # A discipline named without any "пара"/"когда" word still counts: «философия на этой неделе?»
     if not asked and not (group and _matching_disciplines(q, timetable.upcoming(lessons, now, LOOKAHEAD_DAYS))):
         return None
     if not group:
         if missing:
-            text = f"Не нашёл группу «{missing}» в расписании ЭИОС на этот учебный год. Выбери группу в расписании на главной."
-            return Finding(text, [Action("Расписание на главной", "/#schedule-section")], exact=True, weight=100)
-        text = "Я пока не знаю твою группу. Войди через ЭИОС в «Личном кабинете» или выбери группу в расписании на главной, и я подскажу пары."
-        return Finding(text, [Action("Войти через ЭИОС", "/profile"), Action("Расписание на главной", "/#schedule-section")], exact=True, weight=100)
+            text = f"Не нашёл группу «{missing}» в расписании ЭИОС на этот учебный год. Выбери группу в разделе «Расписание»."
+            return Finding(text, [Action("Расписание", "/schedule")], exact=True, weight=100)
+        text = "Я пока не знаю твою группу. Войди через ЭИОС в «Личном кабинете» или выбери группу в разделе «Расписание», и я подскажу пары."
+        return Finding(text, [Action("Войти через ЭИОС", "/profile"), Action("Расписание", "/schedule")], exact=True, weight=100)
 
     own = (user.group_number if user else None) or hint or ""
     other = bool(named) and timetable.normalize_name(group["name"]) != timetable.normalize_name(own)
@@ -884,7 +884,7 @@ async def room_answer(number: str, q: str, now: datetime, dates=(None, None)) ->
         else:
             status = f"Сейчас {name} свободна, на сегодня пар больше нет."
         text = f"{status}\n\n{text}"
-    return Finding(text, [Action(f"{name} на карте", _link("/map", room=name)), Action("Расписание на главной", "/#schedule-section")],
+    return Finding(text, [Action(f"{name} на карте", _link("/map", room=name)), Action("Расписание", "/schedule")],
                    exact=True, weight=100)
 
 

@@ -11,6 +11,7 @@ import CookieNotice from './components/CookieNotice';
 
 // Lazy Loaded Pages for Optimal Bundle Splitting
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Schedule = lazy(() => import('./pages/Schedule'));
 const Forum = lazy(() => import('./pages/Forum'));
 const QuestionDetail = lazy(() => import('./pages/QuestionDetail'));
 const CampusMap = lazy(() => import('./pages/CampusMap'));
@@ -94,6 +95,7 @@ function App() {
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/schedule" element={<Schedule />} />
             <Route path="/forum" element={<Forum />} />
             <Route path="/forum/question/:id" element={<QuestionDetail />} />
             <Route path="/map" element={<CampusMap />} />
