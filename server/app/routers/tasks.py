@@ -13,6 +13,7 @@ from app.db.database import get_db
 import app.models as models
 import app.schemas as schemas
 import app.core.security as security
+from app.core import rate_limit
 from app.routers.associations import is_leader, require_manager
 from app.services import uploads
 
@@ -26,10 +27,6 @@ ARCHIVE_AFTER = timedelta(days=1)
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _is_admin(user: Optional[models.User]) -> bool:
-    return bool(user) and user.role == "admin"
 
 
 def _load(db: Session, task_id: int) -> Optional[models.Task]:
@@ -48,7 +45,7 @@ def _load(db: Session, task_id: int) -> Optional[models.Task]:
 
 
 def can_manage(db: Session, task: models.Task, user: models.User) -> bool:
-    if _is_admin(user):
+    if security.is_admin(user):
         return True
     if task.association_id is None:
         return task.created_by_id == user.id
@@ -233,7 +230,7 @@ def managed_tasks(
     )
     if association_id:
         query = query.filter(models.Task.association_id == association_id)
-    if not _is_admin(user):
+    if not security.is_admin(user):
         led = [
             m.association_id for m in db.query(models.Membership).filter(
                 models.Membership.user_id == user.id,
@@ -434,6 +431,7 @@ def add_comment(
     db: Session = Depends(get_db),
 ):
     task = get_visible(db, task_id, user)
+    rate_limit.check_posting(user)
     comment = models.TaskComment(task_id=task.id, author_id=user.id, text=req.text)
     db.add(comment)
     db.commit()

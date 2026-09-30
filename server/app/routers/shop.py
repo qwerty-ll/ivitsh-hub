@@ -4,26 +4,24 @@ A purchase is checked and written under a lock (balance and stock must not race)
 (by the buyer while it is new, by the administration until it is issued): the bits and the stock come back.
 """
 import os
-import threading
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
-from sqlalchemy import func, text
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.config import settings
 from app.db.database import get_db
 import app.models as models
 import app.schemas as schemas
 import app.core.security as security
+from app.core import locks
 from app.services import progress, uploads
 
 router = APIRouter(prefix="/api/v1", tags=["Shop"])
 
-_lock = threading.Lock()
-_PG_LOCK_KEY = 212121
+LOCK_KEY = 212121
 IMAGE_EXT = (".png", ".jpg", ".jpeg", ".webp")
 STATUS_TEXT = {"new": "Оформлен", "ready": "Готов к выдаче", "issued": "Выдан", "cancelled": "Отменён"}
 
@@ -94,9 +92,7 @@ def image(item_id: int, db: Session = Depends(get_db)):
 
 @router.post("/shop/items/{item_id}/buy")
 def buy(item_id: int, user: models.User = Depends(security.require_current_user), db: Session = Depends(get_db)):
-    with _lock:
-        if db.bind.dialect.name == "postgresql":
-            db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _PG_LOCK_KEY})
+    with locks.serialized(db, LOCK_KEY):
         item = db.query(models.ShopItem).filter(models.ShopItem.id == item_id, models.ShopItem.is_active.is_(True)).first()
         if not item:
             raise HTTPException(status_code=404, detail="Товар не найден")
@@ -124,14 +120,16 @@ def _cancel(db: Session, order: models.ShopOrder, by: models.User, comment: str 
 
 @router.post("/shop/orders/{order_id}/cancel")
 def cancel_mine(order_id: int, user: models.User = Depends(security.require_current_user), db: Session = Depends(get_db)):
-    order = db.query(models.ShopOrder).options(joinedload(models.ShopOrder.item)).filter(
-        models.ShopOrder.id == order_id, models.ShopOrder.user_id == user.id).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Заказ не найден")
-    if order.status != "new":
-        raise HTTPException(status_code=400, detail="Заказ уже собирают — отменить его может администрация")
-    _cancel(db, order, user)
-    db.commit()
+    # Under the shop lock: a cancel racing the administration must not return the stock twice
+    with locks.serialized(db, LOCK_KEY):
+        order = db.query(models.ShopOrder).options(joinedload(models.ShopOrder.item)).filter(
+            models.ShopOrder.id == order_id, models.ShopOrder.user_id == user.id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Заказ не найден")
+        if order.status != "new":
+            raise HTTPException(status_code=400, detail="Заказ уже собирают — отменить его может администрация")
+        _cancel(db, order, user)
+        db.commit()
     return {"order": order_view(order), "balance": progress.balance(db, user)}
 
 
@@ -205,9 +203,7 @@ async def upload_image(
         raise HTTPException(status_code=404, detail="Товар не найден")
     if not name.lower().endswith(IMAGE_EXT):
         raise HTTPException(status_code=415, detail="Нужна картинка: PNG, JPG или WebP")
-    declared = request.headers.get("content-length")
-    if declared and declared.isdigit() and int(declared) > settings.MAX_UPLOAD_MB * 1024 * 1024:
-        raise HTTPException(status_code=413, detail=f"Файл больше {settings.MAX_UPLOAD_MB} МБ")
+    uploads.check_declared_size(request)
     stored, _, _ = await uploads.save(request.stream(), name)
     old, item.image_name = item.image_name, stored
     db.commit()
@@ -219,19 +215,20 @@ async def upload_image(
 @router.patch("/shop/orders/{order_id}")
 def set_order_status(order_id: int, data: schemas.OrderStatusIn,
                      user: models.User = Depends(security.require_admin), db: Session = Depends(get_db)):
-    order = db.query(models.ShopOrder).options(joinedload(models.ShopOrder.item), joinedload(models.ShopOrder.user)).filter(
-        models.ShopOrder.id == order_id).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Заказ не найден")
-    if order.status in ("issued", "cancelled"):
-        raise HTTPException(status_code=400, detail="Заказ уже закрыт")
-    if data.status == "cancelled":
-        _cancel(db, order, user, data.comment.strip())
-    else:
-        order.status, order.updated_at, order.handled_by_id = data.status, _now(), user.id
-        if data.comment.strip():
-            order.comment = data.comment.strip()
-    db.commit()
+    with locks.serialized(db, LOCK_KEY):
+        order = db.query(models.ShopOrder).options(joinedload(models.ShopOrder.item), joinedload(models.ShopOrder.user)).filter(
+            models.ShopOrder.id == order_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Заказ не найден")
+        if order.status in ("issued", "cancelled"):
+            raise HTTPException(status_code=400, detail="Заказ уже закрыт")
+        if data.status == "cancelled":
+            _cancel(db, order, user, data.comment.strip())
+        else:
+            order.status, order.updated_at, order.handled_by_id = data.status, _now(), user.id
+            if data.comment.strip():
+                order.comment = data.comment.strip()
+        db.commit()
     return order_view(order, with_user=True)
 
 
@@ -241,6 +238,8 @@ def grant(data: schemas.GrantIn, user: models.User = Depends(security.require_ad
     target = db.query(models.User).filter(models.User.id == data.user_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
+    if target.id == user.id:
+        raise HTTPException(status_code=403, detail="Начислить биты себе нельзя: попросите другого администратора")
     db.add(models.BitsGrant(user_id=target.id, amount=data.amount, reason=data.reason, created_by_id=user.id))
     db.commit()
     return {"balance": progress.balance(db, target)}

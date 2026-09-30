@@ -1,6 +1,6 @@
 """Achievements and points ("биты", after the «8 бит» coworking) computed from what the student did on the portal.
 
-Nothing here is stored: everything is counted from confirmed facts (attendance marked or not denied,
+Nothing here is stored: everything is counted from confirmed facts (attendance marked by organizers,
 work handed in, answers the asker chose), so there is nothing to farm by clicking. Only the student sees theirs.
 """
 from dataclasses import dataclass
@@ -15,7 +15,7 @@ from app.services import pgas, timetable
 
 # What each confirmed action is worth
 POINTS = {
-    "event": 10,          # took part in an event (not marked absent)
+    "event": 10,          # took part in an event (marked present)
     "volunteer": 15,      # helped as a volunteer
     "meeting": 3,         # marked present at an association meeting
     "task_on_time": 5,    # handed in by the deadline
@@ -27,7 +27,7 @@ POINTS = {
 }
 # Counted per semester at most, so nothing can be farmed. Institute events are set by the administration and
 # are not capped; everything an association leader creates (events, meetings, tasks) is.
-CAPS = {"homework": 10, "answer": 15, "tasks": 15, "meetings": 12, "association_events": 8, "organized": 5}
+CAPS = {"homework": 10, "answer": 15, "solution": 10, "tasks": 15, "meetings": 12, "association_events": 8, "organized": 5}
 # A task counts only if it lived this long before it was handed in (no "create and tick" micro-tasks)
 TASK_MIN_LIFETIME = timedelta(hours=12)
 # An organized event counts when this many other people came
@@ -88,7 +88,8 @@ def facts(db: Session, user: models.User, bounds: Optional[Tuple[datetime, datet
     regs = (
         db.query(models.EventRegistration, models.Event)
         .join(models.Event, models.EventRegistration.event_id == models.Event.id)
-        .filter(models.EventRegistration.user_id == user.id, models.EventRegistration.attended.isnot(False))
+        # Bits only for attendance the organizers confirmed: a sign-up alone is not participation
+        .filter(models.EventRegistration.user_id == user.id, models.EventRegistration.attended.is_(True))
         .all()
     )
     events = volunteer = association_events = 0
@@ -130,8 +131,12 @@ def facts(db: Session, user: models.User, bounds: Optional[Tuple[datetime, datet
     homework = sum(1 for (created,) in db.query(models.GroupHomework.created_at)
                    .filter(models.GroupHomework.created_by_id == user.id) if _in(created, bounds))
     answers = solutions = 0
-    for created, is_solution in db.query(models.ForumAnswer.created_at, models.ForumAnswer.is_solution).filter(
-            models.ForumAnswer.author_id == user.id):
+    # Answers to one's own questions do not count
+    for created, is_solution in (
+        db.query(models.ForumAnswer.created_at, models.ForumAnswer.is_solution)
+        .join(models.ForumQuestion, models.ForumAnswer.question_id == models.ForumQuestion.id)
+        .filter(models.ForumAnswer.author_id == user.id, models.ForumQuestion.author_id != user.id)
+    ):
         if _in(created, bounds):
             answers += 1
             solutions += bool(is_solution)
@@ -145,7 +150,7 @@ def facts(db: Session, user: models.User, bounds: Optional[Tuple[datetime, datet
     if led:
         for event in db.query(models.Event).filter(models.Event.created_by_id == user.id,
                                                    models.Event.association_id.in_(led)).all():
-            came = sum(r.attended is not False for r in event.registrations if r.user_id != user.id)
+            came = sum(r.attended is True for r in event.registrations if r.user_id != user.id)
             took_place = came >= ORGANIZED_MIN_PEOPLE
             if _as_utc(event.ends_at) <= now and took_place and _in(event.starts_at, bounds):
                 organized += 1
@@ -175,7 +180,7 @@ def points(f: Dict[str, int], capped: bool) -> int:
         + cap(f["meetings"], "meetings") * POINTS["meeting"]
         + tasks_on_time * POINTS["task_on_time"] + tasks_late * POINTS["task_late"]
         + cap(f["homework"], "homework") * POINTS["homework"] + cap(f["answers"], "answer") * POINTS["answer"]
-        + f["solutions"] * POINTS["solution"] + cap(f["organized"], "organized") * POINTS["organized"]
+        + cap(f["solutions"], "solution") * POINTS["solution"] + cap(f["organized"], "organized") * POINTS["organized"]
     )
 
 

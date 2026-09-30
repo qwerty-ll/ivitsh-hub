@@ -9,6 +9,7 @@ from typing import Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -42,10 +43,23 @@ def _owner_rights(db: Session, a: models.Attachment, user: models.User) -> Tuple
     return True, posts.can_manage_post(db, post, user)
 
 
+def _check_limits(db: Session, user: models.User, owner: dict) -> None:
+    """A full disk takes the whole portal down: files per item and per student are limited."""
+    column, value = next(iter(owner.items()))
+    on_item = db.query(func.count(models.Attachment.id)).filter(getattr(models.Attachment, column) == value).scalar() or 0
+    if on_item >= settings.FILES_PER_ITEM:
+        raise HTTPException(status_code=400, detail=f"Здесь уже {settings.FILES_PER_ITEM} файлов — удалите лишние")
+    if user.role == "admin":
+        return
+    used = db.query(func.coalesce(func.sum(models.Attachment.size), 0)).filter(
+        models.Attachment.uploaded_by_id == user.id, models.Attachment.kind == "file").scalar() or 0
+    if used >= settings.USER_UPLOAD_QUOTA_MB * 1024 * 1024:
+        raise HTTPException(status_code=413, detail=f"Вы загрузили уже {settings.USER_UPLOAD_QUOTA_MB} МБ — удалите старые файлы")
+
+
 async def _store_file(request: Request, name: str, user: models.User, db: Session, **owner) -> models.Attachment:
-    declared = request.headers.get("content-length")
-    if declared and declared.isdigit() and int(declared) > settings.MAX_UPLOAD_MB * 1024 * 1024:
-        raise HTTPException(status_code=413, detail=f"Файл больше {settings.MAX_UPLOAD_MB} МБ")
+    uploads.check_declared_size(request)
+    _check_limits(db, user, owner)
     stored, size, content_type = await uploads.save(request.stream(), name)
     attachment = models.Attachment(
         kind="file", title=uploads.clean_filename(name), stored_name=stored, size=size,
@@ -62,6 +76,7 @@ async def _store_file(request: Request, name: str, user: models.User, db: Sessio
 
 
 def _add_link(req: schemas.LinkIn, user: models.User, db: Session, **owner) -> models.Attachment:
+    _check_limits(db, user, owner)
     attachment = models.Attachment(kind="link", title=req.title.strip() or req.url, url=req.url, uploaded_by_id=user.id, **owner)
     db.add(attachment)
     db.commit()

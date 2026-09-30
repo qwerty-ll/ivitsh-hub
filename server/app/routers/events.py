@@ -27,24 +27,24 @@ router = APIRouter(prefix="/api/v1", tags=["Events"])
 
 # Participants may rate an event for this long after it ended
 FEEDBACK_WINDOW = timedelta(days=30)
+# Leaders may put an event this far into the past (to record one just held), and fix its list and
+# attendance this long after it ended; older history is the administration's (bits and ПГАС depend on it)
+LEADER_BACKDATE = timedelta(days=1)
+LEADER_FIX_WINDOW = timedelta(days=7)
 
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _is_admin(user: Optional[models.User]) -> bool:
-    return bool(user) and user.role == "admin"
-
-
 def can_manage(db: Session, event: models.Event, user: Optional[models.User]) -> bool:
-    if _is_admin(user):
+    if security.is_admin(user):
         return True
     return bool(user) and event.association_id is not None and is_leader(db, user, event.association_id)
 
 
 def can_see(db: Session, event: models.Event, user: Optional[models.User]) -> bool:
-    if event.association and not event.association.is_active and not _is_admin(user):
+    if event.association and not event.association.is_active and not security.is_admin(user):
         return False
     if event.scope == "institute":
         return True
@@ -173,7 +173,7 @@ def _visible_query(db: Session, user: Optional[models.User]):
         joinedload(models.Event.association),
         selectinload(models.Event.registrations),
     )
-    if _is_admin(user):
+    if security.is_admin(user):
         return query
     mine = []
     if user:
@@ -191,7 +191,7 @@ def _visible_query(db: Session, user: Optional[models.User]):
 
 
 def visible_events(db: Session, user: Optional[models.User]) -> List[models.Event]:
-    return [e for e in _visible_query(db, user).all() if not (e.association and not e.association.is_active and not _is_admin(user))]
+    return [e for e in _visible_query(db, user).all() if not (e.association and not e.association.is_active and not security.is_admin(user))]
 
 
 # --- Lists ---------------------------------------------------------------------------------------
@@ -284,12 +284,22 @@ def export_all(
 
 # --- One event -----------------------------------------------------------------------------------
 
+def _check_dates_for(data: schemas.EventIn, user: models.User) -> None:
+    if not security.is_admin(user) and data.starts_at < _now() - LEADER_BACKDATE:
+        raise HTTPException(status_code=400, detail="Прошедшее мероприятие может внести только администрация")
+
+
+def _check_fix_window(event: models.Event, user: models.User) -> None:
+    if not security.is_admin(user) and schemas.as_utc(event.ends_at) < _now() - LEADER_FIX_WINDOW:
+        raise HTTPException(status_code=400, detail="Прошла неделя после мероприятия: исправить список может администрация")
+
+
 def _check_rights_for(db: Session, data: schemas.EventIn, user: models.User) -> None:
-    if data.scope == "institute" and not _is_admin(user):
+    if data.scope == "institute" and not security.is_admin(user):
         raise HTTPException(status_code=403, detail="Мероприятия уровня института создаёт администрация")
     if data.association_id:
-        _get_association(db, data.association_id, include_inactive=_is_admin(user))
-        if not (_is_admin(user) or is_leader(db, user, data.association_id)):
+        _get_association(db, data.association_id, include_inactive=security.is_admin(user))
+        if not (security.is_admin(user) or is_leader(db, user, data.association_id)):
             raise HTTPException(status_code=403, detail="Создавать мероприятия объединения могут его руководители")
 
 
@@ -300,6 +310,7 @@ def create_event(
     db: Session = Depends(get_db),
 ):
     _check_rights_for(db, data, user)
+    _check_dates_for(data, user)
     event = models.Event(created_by_id=user.id, **data.model_dump())
     db.add(event)
     db.commit()
@@ -323,10 +334,15 @@ def edit_event(
     db: Session = Depends(get_db),
 ):
     event = get_managed(db, event_id, user)
-    if not _is_admin(user) and (data.scope != event.scope or data.association_id != event.association_id):
+    if not security.is_admin(user) and (data.scope != event.scope or data.association_id != event.association_id):
         raise HTTPException(status_code=403, detail="Уровень и организатора мероприятия меняет администрация")
-    if _is_admin(user):
+    if security.is_admin(user):
         _check_rights_for(db, data, user)
+    # The form sends times to the minute: only a real move of the dates is checked
+    moved = abs(data.starts_at - schemas.as_utc(event.starts_at)) >= timedelta(minutes=1) \
+        or abs(data.ends_at - schemas.as_utc(event.ends_at)) >= timedelta(minutes=1)
+    if moved:
+        _check_dates_for(data, user)
     counts = _counts(event)
     if data.participant_limit is not None and data.participant_limit < counts["participants"]:
         raise HTTPException(status_code=400, detail=f"Уже записано участников: {counts['participants']} — лимит не может быть меньше")
@@ -428,8 +444,9 @@ def add_people(
 ):
     """Organizers add people by name: a leader only from the association's members."""
     event = get_managed(db, event_id, user)
+    _check_fix_window(event, user)
     wanted = set(data.user_ids)
-    if _is_admin(user):
+    if security.is_admin(user):
         allowed = {uid for (uid,) in db.query(models.User.id).filter(models.User.id.in_(wanted))}
     else:
         allowed = {
@@ -444,7 +461,7 @@ def add_people(
     if data.role == "volunteer" and event.volunteer_limit is None:
         raise HTTPException(status_code=400, detail="Волонтёры на это мероприятие не нужны")
     have = {r.user_id: r for r in event.registrations}
-    source = "admin" if _is_admin(user) else "leader"
+    source = "admin" if security.is_admin(user) else "leader"
     # Putting someone back is the organizers' call: it lifts the removal
     event.removals = [r for r in event.removals if r.user_id not in wanted]
     for uid in wanted:
@@ -550,6 +567,7 @@ def set_attendance(
     event = get_managed(db, event_id, user)
     if schemas.as_utc(event.starts_at) > _now():
         raise HTTPException(status_code=400, detail="Присутствие отмечают, когда мероприятие началось")
+    _check_fix_window(event, user)
     present = set(data.user_ids)
     unknown = present - {r.user_id for r in event.registrations}
     if unknown:

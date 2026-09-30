@@ -7,6 +7,7 @@ import { FLOORS, FLOOR_PLANS, KIND_STYLE, floorOf, isPickable, roomShape, bounds
 import { roomsApi } from '../services/api';
 import { mskNow, toMinutes } from '../utils/time';
 import { openChat } from '../utils/chat';
+import { plural } from '../utils/plural';
 
 const ICON = { strokeWidth: 1.75 };
 const ZOOMS = [1, 1.5, 2, 3];
@@ -22,14 +23,6 @@ const PRESETS = [
 ];
 
 const DIRECTION = 'Дирекция ИВИТШ. Работает с понедельника по пятницу с 9:00 до 17:00, перерыв с 12:00 до 13:00.';
-
-const plural = (n, one, few, many) => {
-  const t = n % 10;
-  const h = n % 100;
-  if (t === 1 && h !== 11) return one;
-  if (t >= 2 && t <= 4 && (h < 12 || h > 14)) return few;
-  return many;
-};
 
 // The filter described by the address: ?os=Linux, ?eq=проектор, ?type=лекционная, ?filter=computers
 const filterFromParams = (params) => {
@@ -454,7 +447,7 @@ const CampusMap = () => {
         {filter && (
           <p className="map-filter-summary" role="status">
             {total
-              ? <>«{filter.label}» — {total} {plural(total, 'аудитория', 'аудитории', 'аудиторий')}: {FLOORS.filter((f) => counts[f]).map((f) => `${f} этаж — ${counts[f]}`).join(', ')}.</>
+              ? <>«{filter.label}» — {total} {plural(total, ['аудитория', 'аудитории', 'аудиторий'])}: {FLOORS.filter((f) => counts[f]).map((f) => `${f} этаж — ${counts[f]}`).join(', ')}.</>
               : <>«{filter.label}» нет ни в одной аудитории.</>}
             {' '}
             <button type="button" className="map-link-button" onClick={() => applyFilter(null)}>Снять подсветку</button>
@@ -525,8 +518,8 @@ const CampusMap = () => {
                   const kind = fact?.type || room.kind;
                   const dim = matches && !matches.has(room.id);
                   const meta = fact
-                    ? [`${fact.seats} ${plural(fact.seats, 'место', 'места', 'мест')}`, fact.pcs || fact.laptops ? roomSubtitle(fact) : '', fact.pcs || fact.laptops ? fact.os : ''].filter(Boolean).join(' · ')
-                    : space ? `${space.seats} ${plural(space.seats, 'место', 'места', 'мест')}`
+                    ? [`${fact.seats} ${plural(fact.seats, ['место', 'места', 'мест'])}`, fact.pcs || fact.laptops ? roomSubtitle(fact) : '', fact.pcs || fact.laptops ? fact.os : ''].filter(Boolean).join(' · ')
+                    : space ? `${space.seats} ${plural(space.seats, ['место', 'места', 'мест'])}`
                       : room.id === '209' ? 'пн–пт, 9:00–17:00' : KIND_STYLE[kind]?.label;
                   return (
                     <li key={room.id}>

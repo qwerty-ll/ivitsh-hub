@@ -77,8 +77,15 @@ login_failures_by_ip = RateLimiter(max_events=100, window_seconds=15 * 60)
 admin_login_failures_by_ip = RateLimiter(max_events=10, window_seconds=15 * 60)
 chat_requests = RateLimiter(max_events=20, window_seconds=60)
 document_requests = RateLimiter(max_events=30, window_seconds=60)
+# Forum questions and answers, homework entries, comments: a person does not write more than this
+content_posts = RateLimiter(max_events=30, window_seconds=10 * 60)
+
+
+def check_posting(user) -> None:
+    if not content_posts.hit(f"user:{user.id}"):
+        raise too_many_requests("Слишком много сообщений подряд. Подождите несколько минут.")
 
 
 def reset_all() -> None:
-    for limiter in (login_failures_by_user, login_failures_by_ip, admin_login_failures_by_ip, chat_requests, document_requests):
+    for limiter in (login_failures_by_user, login_failures_by_ip, admin_login_failures_by_ip, chat_requests, document_requests, content_posts):
         limiter.clear()

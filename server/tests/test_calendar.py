@@ -102,7 +102,7 @@ def test_meetings_are_set_by_leaders_and_seen_by_members(club, db):
 
 def test_attendance_and_summary_after_the_meeting(club, db):
     aid, leader, member, outsider = club
-    before = datetime.now(timezone.utc) - timedelta(days=1)
+    before = datetime.now(timezone.utc) - timedelta(hours=20)
     mid = leader.post(f"/api/v1/associations/{aid}/meetings", json={
         "starts_at": _iso(before), "ends_at": _iso(before + timedelta(hours=1))}, headers=CSRF).json()["id"]
     r = leader.put(f"/api/v1/meetings/{mid}/attendance", json={"user_ids": [_uid(db, 3)]}, headers=CSRF)
@@ -149,9 +149,14 @@ def test_calendar_puts_everything_together(club, db, fake_timetable):
     aid, leader, member, _ = club
     db.add(models.SdoCourse(user_id=_uid(db, 2), course_id=4321, name="Базы данных (2026-2027)"))
     db.commit()
-    leader.post(f"/api/v1/associations/{aid}/meetings", json={
-        "title": "Сбор", "starts_at": "2026-09-23T18:00:00+03:00", "ends_at": "2026-09-23T19:30:00+03:00",
-        "place": "Б-108"}, headers=CSRF)
+    # A meeting a week ago: set in the past directly, leaders cannot backdate one
+    mid = leader.post(f"/api/v1/associations/{aid}/meetings", json={
+        "title": "Сбор", "starts_at": "2030-09-23T18:00:00+03:00", "ends_at": "2030-09-23T19:30:00+03:00",
+        "place": "Б-108"}, headers=CSRF).json()["id"]
+    row = db.get(models.Meeting, mid)
+    row.starts_at = datetime(2026, 9, 23, 15, 0, tzinfo=timezone.utc)
+    row.ends_at = datetime(2026, 9, 23, 16, 30, tzinfo=timezone.utc)
+    db.commit()
     member.post("/api/v1/tasks", json={"title": "Эссе", "color": "pink", "due_at": "2026-09-25T12:00:00+03:00"}, headers=CSRF)
     member.post("/api/v1/tasks", json={"title": "Потом", "due_at": "2026-10-20T12:00:00+03:00"}, headers=CSRF)
     member.post("/api/v1/homework", json={"subject": "Философия", "text": "Конспект",

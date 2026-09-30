@@ -8,6 +8,7 @@ from app.db.database import get_db
 import app.models as models
 import app.schemas as schemas
 import app.core.security as security
+from app.core import rate_limit
 
 router = APIRouter(prefix="/api/v1/forum", tags=["Forum"])
 
@@ -104,6 +105,7 @@ def create_question(
     current_user: models.User = Depends(security.require_current_user),
     db: Session = Depends(get_db)
 ):
+    rate_limit.check_posting(current_user)
     new_q = models.ForumQuestion(
         author_id=current_user.id,
         title=q_in.title,
@@ -218,6 +220,7 @@ def post_answer(
     q = db.query(models.ForumQuestion).filter(models.ForumQuestion.id == question_id).first()
     if not q:
         raise HTTPException(status_code=404, detail="Вопрос не найден")
+    rate_limit.check_posting(current_user)
 
     new_ans = models.ForumAnswer(
         question_id=question_id,
@@ -338,6 +341,9 @@ def toggle_solution(
     answer = _get_answer_or_404(db, answer_id)
     if answer.question.author_id != current_user.id and not security.is_moderator(current_user):
         raise HTTPException(status_code=403, detail="Отметить решение может только автор вопроса или модератор")
+    if answer.author_id == answer.question.author_id:
+        # Bits are paid for solutions: an answer to one's own question is never one
+        raise HTTPException(status_code=400, detail="Свой ответ на свой вопрос нельзя отметить решением")
     mark = not answer.is_solution
     if mark:
         db.query(models.ForumAnswer).filter(

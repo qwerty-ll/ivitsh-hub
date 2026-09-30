@@ -8,9 +8,9 @@ import random
 import time as clock
 from collections import defaultdict
 from datetime import date, datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List
 
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, selectinload
 
 import app.models as models
 from app.routers.homework import group_key

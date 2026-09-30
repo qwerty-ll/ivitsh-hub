@@ -15,6 +15,7 @@ import { openChat } from '../utils/chat';
 import { markStep, readSteps, ONBOARDING_EVENT } from '../utils/onboarding';
 import { subgroupOf, cleanLessonTitle } from '../utils/lessons';
 import { dayKey, fitsSubgroup, readSubgroup, timeLabel } from '../utils/calendar';
+import { plural } from '../utils/plural';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 
@@ -23,13 +24,6 @@ const SHORTCUTS = ['events', 'tribes', 'shop', 'map'];
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const localIso = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-const plural = (n, [one, few, many]) => {
-  const m10 = n % 10, m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return one;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
-  return many;
-};
-
 const toMinutes = (hm = '') => {
   const [h, m] = hm.split(':').map(Number);
   return (h || 0) * 60 + (m || 0);

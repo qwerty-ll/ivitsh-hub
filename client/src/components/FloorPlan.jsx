@@ -1,5 +1,6 @@
 import React, { useId } from 'react';
 import { FLOOR_PLANS, KIND_STYLE, VIEW, boundsOf, isPickable } from '../data/floorPlans';
+import { plural } from '../utils/plural';
 
 // One floor of корпус Б drawn from data: rooms coloured by kind, the selected one filled and pinned.
 //   facts     { [room id]: room from /api/v1/rooms } — places and computers under the numbers
@@ -9,14 +10,6 @@ import { FLOOR_PLANS, KIND_STYLE, VIEW, boundsOf, isPickable } from '../data/flo
 const kindOf = (room, facts) => facts?.[room.id]?.type || room.kind || 'office';
 const toneOf = (kind) => (KIND_STYLE[kind] || KIND_STYLE.office).tone;
 
-const plural = (n, one, few, many) => {
-  const t = n % 10;
-  const h = n % 100;
-  if (t === 1 && h !== 11) return one;
-  if (t >= 2 && t <= 4 && (h < 12 || h > 14)) return few;
-  return many;
-};
-
 // Under the number: computers when there are any, else places
 export const roomSubtitle = (fact) => {
   if (!fact) return '';
@@ -24,7 +17,7 @@ export const roomSubtitle = (fact) => {
   if (fact.pcs) parts.push(`${fact.pcs} ПК`);
   if (fact.laptops) parts.push(`${fact.laptops} ноут.`);
   if (parts.length) return parts.join(' · ');
-  return fact.seats ? `${fact.seats} ${plural(fact.seats, 'место', 'места', 'мест')}` : '';
+  return fact.seats ? `${fact.seats} ${plural(fact.seats, ['место', 'места', 'мест'])}` : '';
 };
 
 export const roomTitle = (room) => (/^\d{3}$/.test(room.id) ? `Б-${room.id}` : room.label || room.id);

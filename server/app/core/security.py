@@ -162,6 +162,10 @@ def require_moderator(user: models.User = Depends(require_current_user)) -> mode
     return user
 
 
+def is_admin(user: Optional[models.User]) -> bool:
+    return bool(user) and user.role == "admin"
+
+
 def is_moderator(user: Optional[models.User]) -> bool:
     return bool(user) and user.role in ("admin", "moderator")
 

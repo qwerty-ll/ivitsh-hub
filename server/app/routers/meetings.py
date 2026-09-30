@@ -2,8 +2,8 @@
 
 Rights: approved members see the association's meetings; its leaders and administrators manage them.
 """
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -15,6 +15,15 @@ import app.core.security as security
 from app.routers.associations import _get_association, is_leader, require_manager
 
 router = APIRouter(prefix="/api/v1", tags=["Meetings"])
+
+# As for events: leaders record a meeting at most a day back and mark attendance within a week
+LEADER_BACKDATE = timedelta(days=1)
+LEADER_FIX_WINDOW = timedelta(days=7)
+
+
+def _check_start(data: schemas.MeetingIn, user: models.User) -> None:
+    if user.role != "admin" and schemas.as_utc(data.starts_at) < datetime.now(timezone.utc) - LEADER_BACKDATE:
+        raise HTTPException(status_code=400, detail="Прошедшее собрание может внести только администрация")
 
 
 def is_member(db: Session, user: models.User, association_id: int) -> bool:
@@ -123,6 +132,7 @@ def create_meeting(
     db: Session = Depends(get_db),
 ):
     require_manager(association_id, user, db)
+    _check_start(data, user)
     meeting = models.Meeting(association_id=association_id, created_by_id=user.id, **data.model_dump())
     db.add(meeting)
     db.commit()
@@ -147,6 +157,8 @@ def edit_meeting(
     db: Session = Depends(get_db),
 ):
     meeting = _managed(db, meeting_id, user)
+    if abs(schemas.as_utc(data.starts_at) - schemas.as_utc(meeting.starts_at)) >= timedelta(minutes=1):
+        _check_start(data, user)
     for field, value in data.model_dump().items():
         setattr(meeting, field, value)
     db.commit()
@@ -174,6 +186,9 @@ def set_attendance(
     meeting = _managed(db, meeting_id, user)
     if meeting.starts_at and schemas.as_utc(meeting.starts_at) > datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Присутствие отмечают, когда собрание началось")
+    ended = schemas.as_utc(meeting.ends_at or meeting.starts_at)
+    if user.role != "admin" and ended < datetime.now(timezone.utc) - LEADER_FIX_WINDOW:
+        raise HTTPException(status_code=400, detail="Прошла неделя после собрания: исправить отметки может администрация")
     allowed = {
         uid for (uid,) in db.query(models.Membership.user_id).filter(
             models.Membership.association_id == meeting.association_id, models.Membership.status == "approved")

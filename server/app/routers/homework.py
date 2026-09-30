@@ -13,6 +13,7 @@ from app.db.database import get_db
 import app.models as models
 import app.schemas as schemas
 import app.core.security as security
+from app.core import rate_limit
 
 router = APIRouter(prefix="/api/v1", tags=["Group homework"])
 
@@ -88,6 +89,7 @@ def add_homework(
     db: Session = Depends(get_db),
 ):
     key = _require_group(user)
+    rate_limit.check_posting(user)
     entry = models.GroupHomework(group_key=key, group_number=user.group_number.strip(), created_by_id=user.id,
                                  **data.model_dump())
     db.add(entry)

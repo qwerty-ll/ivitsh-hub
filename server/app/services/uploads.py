@@ -42,6 +42,13 @@ def _check_signature(ext: str, head: bytes) -> bool:
     return any(head.startswith(sig) for sig in ALLOWED[ext][1])
 
 
+def check_declared_size(request) -> None:
+    """Refuses a body that announces itself as too big before reading any of it."""
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > settings.MAX_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(status_code=413, detail=f"Файл больше {settings.MAX_UPLOAD_MB} МБ")
+
+
 def path_of(stored_name: str) -> str:
     if not _STORED_NAME.match(stored_name or ""):
         raise HTTPException(status_code=404, detail="Файл не найден")

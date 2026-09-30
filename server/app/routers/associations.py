@@ -6,7 +6,7 @@ an association's leaders and the administrators manage its members.
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.database import get_db
@@ -60,10 +60,6 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _is_admin(user: Optional[models.User]) -> bool:
-    return bool(user) and user.role == "admin"
-
-
 def _get_association(db: Session, association_id: int, *, include_inactive: bool = False) -> models.Association:
     association = db.query(models.Association).filter(models.Association.id == association_id).first()
     if not association or (not association.is_active and not include_inactive):
@@ -88,8 +84,8 @@ def is_leader(db: Session, user: Optional[models.User], association_id: int) -> 
 
 def require_manager(association_id: int, user: models.User, db: Session) -> models.Association:
     """The association's leader or an administrator; everyone else gets 403."""
-    association = _get_association(db, association_id, include_inactive=_is_admin(user))
-    if not (_is_admin(user) or is_leader(db, user, association_id)):
+    association = _get_association(db, association_id, include_inactive=security.is_admin(user))
+    if not (security.is_admin(user) or is_leader(db, user, association_id)):
         raise HTTPException(status_code=403, detail="Управлять объединением могут его руководители и администраторы")
     return association
 
@@ -208,10 +204,10 @@ def get_association(
         .filter(models.Association.id == association_id)
         .first()
     )
-    if not association or (not association.is_active and not _is_admin(viewer)):
+    if not association or (not association.is_active and not security.is_admin(viewer)):
         raise HTTPException(status_code=404, detail="Объединение не найдено")
     detail = _item(association, viewer)
-    can_manage = _is_admin(viewer) or is_leader(db, viewer, association_id)
+    can_manage = security.is_admin(viewer) or is_leader(db, viewer, association_id)
     detail["can_manage"] = can_manage
     if can_manage:
         by_name = sorted(association.memberships, key=lambda m: m.user.full_name)

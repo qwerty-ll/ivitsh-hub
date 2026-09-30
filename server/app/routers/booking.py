@@ -5,12 +5,10 @@ Laptops: at no moment may more than LAPTOPS_TOTAL be booked at once. A booking i
 its author or an administrator may cancel it. Association leaders and administrators book;
 every signed-in user sees what is taken.
 """
-import threading
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import text
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
@@ -18,6 +16,7 @@ from app.db.database import get_db
 import app.models as models
 import app.schemas as schemas
 import app.core.security as security
+from app.core import locks
 from app.routers.associations import is_leader
 from app.services import timetable
 
@@ -26,10 +25,13 @@ router = APIRouter(prefix="/api/v1", tags=["Booking"])
 ZONE_TEXT = {"top": "верх", "bottom": "низ", "whole": "всё помещение"}
 MIN_MINUTES = 15
 MAX_DAYS_AHEAD = 90
+# A leader cannot take the room for the whole semester: one booking is at most this long,
+# and one person holds at most this many upcoming bookings (the administration is not limited)
+LEADER_MAX_HOURS = 6
+LEADER_MAX_UPCOMING = 10
 # The check and the insert must not interleave: one lock per process (the portal runs one),
 # plus a transaction-level advisory lock on PostgreSQL
-_lock = threading.Lock()
-_PG_LOCK_KEY = 108108
+LOCK_KEY = 108108
 
 
 def _now() -> datetime:
@@ -45,10 +47,6 @@ def _msk(dt: datetime) -> datetime:
     return schemas.as_utc(dt).astimezone(timetable.MSK)
 
 
-def _is_admin(user: models.User) -> bool:
-    return user.role == "admin"
-
-
 def _led(db: Session, user: models.User) -> List[int]:
     return [
         aid for (aid,) in db.query(models.Membership.association_id).join(models.Association).filter(
@@ -58,7 +56,7 @@ def _led(db: Session, user: models.User) -> List[int]:
 
 
 def can_book(db: Session, user: models.User) -> bool:
-    return _is_admin(user) or bool(_led(db, user))
+    return security.is_admin(user) or bool(_led(db, user))
 
 
 def item(b: models.Booking, user: models.User) -> Dict:
@@ -72,7 +70,7 @@ def item(b: models.Booking, user: models.User) -> Dict:
         "cancel_reason": b.cancel_reason,
         "mine": b.booked_by_id == user.id,
         "can_cancel": b.cancelled_at is None and schemas.as_utc(b.ends_at) > _now()
-        and (_is_admin(user) or b.booked_by_id == user.id),
+        and (security.is_admin(user) or b.booked_by_id == user.id),
     }
 
 
@@ -192,17 +190,22 @@ def create_booking(
 ):
     if not can_book(db, user):
         raise HTTPException(status_code=403, detail="Бронировать могут руководители объединений и администрация")
-    if data.association_id is None and not _is_admin(user):
+    if data.association_id is None and not security.is_admin(user):
         raise HTTPException(status_code=400, detail="Выберите объединение, для которого бронь")
-    if data.association_id is not None and not _is_admin(user) and not is_leader(db, user, data.association_id):
+    if data.association_id is not None and not security.is_admin(user) and not is_leader(db, user, data.association_id):
         raise HTTPException(status_code=403, detail="Бронировать можно только для объединения, которым вы руководите")
     if data.resource == "laptops" and data.laptops > settings.LAPTOPS_TOTAL:
         raise HTTPException(status_code=400, detail=f"Всего ноутбуков: {settings.LAPTOPS_TOTAL}")
     _check_time(data.starts_at, data.ends_at)
+    if not security.is_admin(user):
+        if data.ends_at - data.starts_at > timedelta(hours=LEADER_MAX_HOURS):
+            raise HTTPException(status_code=400, detail=f"Одна бронь — не дольше {LEADER_MAX_HOURS} часов")
+        upcoming = db.query(models.Booking).filter(models.Booking.booked_by_id == user.id, models.Booking.cancelled_at.is_(None),
+                                                   models.Booking.ends_at > _now()).count()
+        if upcoming >= LEADER_MAX_UPCOMING:
+            raise HTTPException(status_code=409, detail=f"У вас уже {LEADER_MAX_UPCOMING} предстоящих броней — отмените ненужные")
 
-    with _lock:
-        if db.bind.dialect.name == "postgresql":
-            db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _PG_LOCK_KEY})
+    with locks.serialized(db, LOCK_KEY):
         if data.resource == "room":
             _check_room(db, data.zone, data.starts_at, data.ends_at)
         else:
@@ -227,7 +230,7 @@ def cancel_booking(
     db: Session = Depends(get_db),
 ):
     b = _load(db, booking_id)
-    if not (_is_admin(user) or b.booked_by_id == user.id):
+    if not (security.is_admin(user) or b.booked_by_id == user.id):
         raise HTTPException(status_code=403, detail="Отменить чужую бронь может только администрация")
     if b.cancelled_at is None and schemas.as_utc(b.ends_at) <= _now():
         raise HTTPException(status_code=400, detail="Бронь уже закончилась")

@@ -116,7 +116,7 @@ def test_leaders_add_members_only_and_groups_are_for_admins(club, db, app, fake_
 
 def test_attendance_feedback_and_documents(club, db):
     admin, aid, leader, member, outsider = club
-    past = datetime.now(timezone.utc) - timedelta(days=1)
+    past = datetime.now(timezone.utc) - timedelta(hours=20)
     ev = _event(leader, association_id=aid, starts_at=_iso(past), ends_at=_iso(past + timedelta(hours=2)))
     assert member.post(f"/api/v1/events/{ev['id']}/register", json={}, headers=CSRF).status_code == 400  # already over
     leader.post(f"/api/v1/events/{ev['id']}/registrations", json={"user_ids": [_uid(db, 2), _uid(db, 1)]}, headers=CSRF)

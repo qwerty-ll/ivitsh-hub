@@ -82,6 +82,9 @@ class Settings:
         # Files attached to tasks and announcements: kept on disk here (a Docker volume), never in git
         self.UPLOAD_DIR = os.path.abspath(os.getenv("UPLOAD_DIR", "").strip() or "uploads")
         self.MAX_UPLOAD_MB = max(1, _int("MAX_UPLOAD_MB", 10))
+        # Everything one student may keep uploaded (administrators are not limited), and files per task/event/…
+        self.USER_UPLOAD_QUOTA_MB = max(1, _int("USER_UPLOAD_QUOTA_MB", 300))
+        self.FILES_PER_ITEM = max(1, _int("FILES_PER_ITEM", 30))
 
     @property
     def admin_username_normalized(self) -> str:

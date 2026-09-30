@@ -8,19 +8,12 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { forumApi } from '../services/api';
 import SectionIcon from '../components/SectionIcon';
+import { plural } from '../utils/plural';
 
 const ICON = { strokeWidth: 1.75 };
 const EASE = [0.16, 1, 0.3, 1];
 
 /** Russian plural: plural(3, ['ответ', 'ответа', 'ответов']) → 'ответа' */
-const plural = (n, [one, few, many]) => {
-  const m10 = n % 10;
-  const m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return one;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
-  return many;
-};
-
 const Forum = () => {
   const navigate = useNavigate();
   const { user, isLoggedIn, canModerate } = useAuth();

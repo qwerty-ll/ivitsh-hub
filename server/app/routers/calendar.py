@@ -2,9 +2,9 @@
 task deadlines and group homework, for a range of days."""
 import logging
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.database import get_db

@@ -6,19 +6,12 @@ import { contentApi, scheduleApi } from '../services/api';
 import SectionIcon from '../components/SectionIcon';
 import { initialsOf } from '../utils/avatar';
 import { mskNow, toMinutes } from '../utils/time';
+import { plural } from '../utils/plural';
 
 const ICON = { strokeWidth: 1.75 };
 const EASE = [0.16, 1, 0.3, 1];
 
 /** Russian plural: plural(3, ['преподаватель', 'преподавателя', 'преподавателей']) */
-const plural = (n, [one, few, many]) => {
-  const m10 = n % 10;
-  const m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return one;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
-  return many;
-};
-
 
 /** Teacher photo from kosgos.ru with an initials fallback when the image is missing or fails to load. */
 const TeacherPhoto = ({ photo, name, size = 'md' }) => {

@@ -73,10 +73,13 @@ def _age_task(db, task_id, hours):
 
 def test_points_and_badges_come_from_confirmed_facts(club, db):
     admin, aid, leader, member = club
-    past = datetime.now(timezone.utc) - timedelta(days=1)
+    past = datetime.now(timezone.utc) - timedelta(hours=20)
     ev = leader.post("/api/v1/events", json={"title": "Квиз", "association_id": aid, "starts_at": past.isoformat(),
                                              "ends_at": (past + timedelta(hours=2)).isoformat(), "volunteer_limit": 3}, headers=CSRF).json()
     leader.post(f"/api/v1/events/{ev['id']}/registrations", json={"user_ids": [_uid(db, 2)], "role": "volunteer"}, headers=CSRF)
+    # Bits only once the organizers marked them present
+    assert member.get("/api/v1/progress").json()["facts"]["volunteer"] == 0
+    leader.put(f"/api/v1/events/{ev['id']}/attendance", json={"user_ids": [_uid(db, 2)]}, headers=CSRF)
     # A task accepted by the leader, handed in on time, set a day before
     due = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
     t = leader.post("/api/v1/tasks", json={"title": "Ролик", "association_id": aid, "to_all": True, "due_at": due}, headers=CSRF).json()

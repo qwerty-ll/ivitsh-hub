@@ -7,18 +7,12 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { tribesApi } from '../services/api';
 import { bits } from '../components/Progress';
+import { plural } from '../utils/plural';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 const DEFAULT_NAMES = ['Альфа', 'Бета', 'Гамма', 'Дельта', 'Эпсилон', 'Зета', 'Эта', 'Тета'];
 const fmt = (d) => new Date(`${d}T00:00:00`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 const daysLeft = (end) => Math.max(0, Math.ceil((new Date(`${end}T23:59:59`) - new Date()) / 864e5));
-const plural = (n, [one, few, many]) => {
-  const m10 = n % 10, m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return one;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
-  return many;
-};
-
 /** One tribe in the standings: place, name in its color, points and the way to the leader */
 const TribeRow = ({ tribe, leader, mine, open, onToggle }) => (
   <li className={`tribe-row hue-${tribe.color} ${mine ? 'is-mine' : ''}`}>

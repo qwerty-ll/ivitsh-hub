@@ -3,18 +3,13 @@ import { Link } from 'react-router-dom';
 import {
   PartyPopper, HandHeart, Users, Clock, NotebookPen, MessageCircle, Handshake, Megaphone, Trophy, Lock, ArrowRight,
 } from 'lucide-react';
+import { plural } from '../utils/plural';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 const ICONS = { PartyPopper, HandHeart, Users, Clock, NotebookPen, MessageCircle, Handshake, Megaphone };
 // Bronze, silver, gold
 export const TIERS = [null, { label: 'Бронза', hue: 'orange' }, { label: 'Серебро', hue: 'slate' }, { label: 'Золото', hue: 'amber' }];
 
-const plural = (n, [one, few, many]) => {
-  const m10 = n % 10, m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return one;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
-  return many;
-};
 export const bits = (n) => `${n} ${plural(n, ['бит', 'бита', 'бит'])}`;
 
 /** Level, points and the way to the next level */
@@ -85,12 +80,12 @@ export const PointsRules = ({ rules, caps }) => (
   <details className="points-rules">
     <summary>За что начисляются биты</summary>
     <ul>
-      <li>Мероприятие — {rules.event}, волонтёром — {rules.volunteer} (мероприятий объединений — до {caps.association_events} за семестр, института — без лимита)</li>
+      <li>Мероприятие, где организаторы отметили ваше присутствие, — {rules.event}, волонтёром — {rules.volunteer} (мероприятий объединений — до {caps.association_events} за семестр, института — без лимита)</li>
       <li>Собрание объединения (отмечено присутствие) — {rules.meeting}, до {caps.meetings} за семестр</li>
       <li>Задача объединения, принятая руководителем, вовремя — {rules.task_on_time}, с опозданием — {rules.task_late}; до {caps.tasks} задач за семестр</li>
       <li>Запись ДЗ для группы — {rules.homework} (до {caps.homework} за семестр)</li>
-      <li>Ответ на форуме — {rules.answer} (до {caps.answer} за семестр), ответ выбран лучшим — ещё {rules.solution}</li>
-      <li>Проведённое мероприятие объединения (пришли хотя бы трое) — {rules.organized}, до {caps.organized} за семестр</li>
+      <li>Ответ на форуме — {rules.answer} (до {caps.answer} за семестр), ответ выбран лучшим — ещё {rules.solution} (до {caps.solution}); ответы на свои вопросы не считаются</li>
+      <li>Проведённое мероприятие объединения (отмечены хотя бы трое пришедших) — {rules.organized}, до {caps.organized} за семестр</li>
     </ul>
     <p>Считается только подтверждённое: присутствие отмечают организаторы, задачу принимает руководитель, лучший ответ выбирает автор вопроса.
       Задача засчитывается, только если у неё был срок, её поставил другой человек и она висела хотя бы 12 часов — мелкими задачками не накрутить.

@@ -4,16 +4,16 @@ tribes collect their members' points plus awards, and at the end the top tribes'
 Everyone signed in sees the standings; member lists show names only (no contacts).
 """
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, selectinload
 
 from app.db.database import get_db
 import app.models as models
 import app.schemas as schemas
 import app.core.security as security
-from app.services import timetable, tribes as tribes_service
+from app.services import tribes as tribes_service
 
 router = APIRouter(prefix="/api/v1", tags=["Tribes"])
 
@@ -149,6 +149,15 @@ def create(data: schemas.TournamentIn, user: models.User = Depends(security.requ
     return view(db, _load(db, t.id), user)
 
 
+def _claim(db: Session, t: models.Tournament, was: str, becomes: str) -> bool:
+    """Moves the tournament to a new status only if nobody did it first (one conditional UPDATE)."""
+    done = db.query(models.Tournament).filter(models.Tournament.id == t.id, models.Tournament.status == was).update(
+        {models.Tournament.status: becomes}, synchronize_session=False)
+    if done:
+        db.refresh(t)
+    return bool(done)
+
+
 @router.post("/tribes/tournaments/{tournament_id}/start")
 def start(tournament_id: int, user: models.User = Depends(security.require_admin), db: Session = Depends(get_db)):
     """Splits the students into the tribes at random and starts the tournament."""
@@ -160,6 +169,8 @@ def start(tournament_id: int, user: models.User = Depends(security.require_admin
     people = tribes_service.pool(db, t)
     if len(people) < len(t.tribes):
         raise HTTPException(status_code=400, detail=f"Участников ({len(people)}) меньше, чем трайбов")
+    if not _claim(db, t, "draft", "active"):
+        raise HTTPException(status_code=400, detail="Турнир уже запущен")
     for tribe, team in zip(t.tribes, tribes_service.split(people, len(t.tribes))):
         tribe.members = [models.TribeMember(tournament_id=t.id, user_id=u.id) for u in team]
     t.status = "active"
@@ -207,7 +218,8 @@ def move(tournament_id: int, user_id: int, data: schemas.MoveIn,
 def finish(tournament_id: int, user: models.User = Depends(security.require_admin), db: Session = Depends(get_db)):
     """Fixes the standings and pays the prizes: every member of the top three tribes gets bits."""
     t = _load(db, tournament_id)
-    if t.status != "active":
+    # Claim the tournament atomically: a double click must not pay the prizes twice
+    if not _claim(db, t, "active", "finished"):
         raise HTTPException(status_code=400, detail="Завершить можно только идущий турнир")
     tribes_service.clear_cache()
     table = tribes_service.standings(db, t)["tribes"]
