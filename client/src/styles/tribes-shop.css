@@ -80,14 +80,14 @@
 .tribe-top-n { color: var(--text-3); }
 .tribe-top-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tribe-top-points { font-weight: var(--weight-semibold); color: var(--tile); }
-.tribe-updated { margin-top: var(--space-2); }
+.tribe-updated { margin: var(--space-2) 0 var(--space-5); }
 
 .tribe-admin { display: flex; flex-direction: column; gap: var(--space-4); align-items: flex-start; }
 .tribe-award { display: flex; flex-wrap: wrap; gap: var(--space-2); width: 100%; }
 .tribe-award .select { width: auto; }
 .tribe-award .input { flex: 1; min-width: 12rem; }
 .tribe-award .tribe-award-points { flex: 0 0 6rem; min-width: 0; }
-.tribe-bottom { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
+.tribe-bottom { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); align-items: start; }
 @media (min-width: 900px) { .tribe-bottom { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 .tribe-awards li { display: flex; gap: var(--space-3); align-items: baseline; padding: var(--space-2) 0; border-top: 1px solid var(--border); font-size: var(--text-sm); }
 .tribe-awards li:first-child { border-top: none; }
@@ -118,16 +118,19 @@ span.tribe-award-points.is-minus { color: var(--danger); }
 .shop-wallet-meta { font-size: var(--text-sm); color: var(--text-2); }
 .shop-tabs { margin-bottom: var(--space-5); }
 .shop-section-title { font-size: var(--text-lg); margin: var(--space-5) 0 var(--space-3); }
-.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--space-4); list-style: none; padding: 0; }
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--space-4); list-style: none; padding: 0; }
 .shop-card { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .shop-pic { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--surface-2); }
-.shop-pic-empty { display: grid; place-items: center; background: var(--tile-tint); color: var(--tile); }
+.shop-pic-empty { display: grid; place-items: center; aspect-ratio: 5 / 2; background: radial-gradient(circle at 50% 120%, var(--tile-soft), var(--tile-tint) 70%); color: var(--tile); }
+.shop-card.is-soldout .shop-pic,
+.shop-card.is-soldout .shop-card-title,
+.shop-card.is-soldout .shop-price { opacity: 0.55; filter: grayscale(0.6); }
+.shop-card-left { font-size: var(--text-xs); font-weight: var(--weight-semibold); color: var(--hue-orange); }
 .shop-card-body { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4); flex: 1; }
 .shop-card-top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-.badge.shop-kind { background: var(--tile-soft); color: var(--tile); box-shadow: none; }
 .shop-card-title { font-size: var(--text-md); font-weight: var(--weight-semibold); }
 .shop-card-desc { font-size: var(--text-sm); color: var(--text-2); }
-.shop-card-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: auto; padding-top: var(--space-2); }
+.shop-card-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3); margin-top: auto; padding-top: var(--space-2); }
 .shop-price { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-lg); font-weight: var(--weight-semibold); color: var(--hue-amber); }
 .shop-orders { padding: var(--space-2) var(--space-5); }
 .shop-order { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
@@ -157,4 +160,8 @@ span.tribe-award-points.is-minus { color: var(--danger); }
   .tribe-row-main .dash-chevron { display: none; }
   .tribe-points { font-size: var(--text-lg); }
   .shop-wallet { padding: var(--space-4); }
+  .shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+  .shop-card-body { padding: var(--space-3); }
+  .shop-card-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .shop-card-foot .btn { width: 100%; }
 }

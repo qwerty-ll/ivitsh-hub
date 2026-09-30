@@ -20,26 +20,29 @@ const ItemPicture = ({ item }) => {
     : <span className={`shop-pic shop-pic-empty hue-${kind.hue}`} aria-hidden="true"><kind.Icon size={40} {...ICON} /></span>;
 };
 
+const isSoldOut = (item) => item.stock !== null && item.stock <= 0;
+// Sold-out goods go to the end of the shelf
+const shelf = (items) => [...items].sort((a, b) => isSoldOut(a) - isSoldOut(b));
+
 const ItemCard = ({ item, available, onBuy }) => {
   const kind = KIND[item.kind] || KIND.merch;
-  const soldOut = item.stock !== null && item.stock <= 0;
+  const soldOut = isSoldOut(item);
   const short = item.price - available;
   const reason = soldOut ? 'Нет в наличии' : item.limit_reached ? 'Лимит на человека' : short > 0 ? `Не хватает ${short}` : null;
   return (
-    <li className={`card shop-card hue-${kind.hue}`}>
+    <li className={`card shop-card hue-${kind.hue} ${soldOut ? 'is-soldout' : ''}`}>
       <ItemPicture item={item} />
       <div className="shop-card-body">
-        <p className="shop-card-top">
-          <span className="badge shop-kind">{kind.label}</span>
-          {item.stock !== null && !soldOut && <span className="task-optional">осталось {item.stock}</span>}
-        </p>
         <h3 className="shop-card-title">{item.title}</h3>
         {item.description && <p className="shop-card-desc">{item.description}</p>}
+        {item.stock !== null && !soldOut && item.stock <= 10 && <p className="shop-card-left">осталось {item.stock}</p>}
         <div className="shop-card-foot">
           <span className="shop-price tabular"><Coins size={18} {...ICON} />{item.price}</span>
-          <button type="button" className="btn btn-primary btn-sm" disabled={!!reason} onClick={() => onBuy(item)} title={reason || undefined}>
-            {reason || 'Обменять'}
-          </button>
+          {onBuy && (
+            <button type="button" className={`btn btn-sm ${reason ? 'btn-secondary' : 'btn-primary'}`} disabled={!!reason} onClick={() => onBuy(item)} title={reason || undefined}>
+              {reason || 'Обменять'}
+            </button>
+          )}
         </div>
       </div>
     </li>
@@ -246,10 +249,11 @@ const ShopAdmin = ({ onChanged }) => {
 };
 
 const Shop = () => {
-  const { isLoggedIn, isAdmin } = useAuth();
+  const { isLoggedIn, isAdmin, isMainAdmin } = useAuth();
   const toast = useToast();
   const [data, setData] = useState(null);
-  const [tab, setTab] = useState('shop');
+  // The portal's own admin account earns no bits: it only runs the shop
+  const [tab, setTab] = useState(isMainAdmin ? 'admin' : 'shop');
   const [buying, setBuying] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -297,23 +301,26 @@ const Shop = () => {
   }
   if (!data) return <div className="container">{header}<span className="skeleton cal-skeleton" /></div>;
   const b = data.balance;
-  const merch = data.items.filter(i => i.kind === 'merch');
-  const privileges = data.items.filter(i => i.kind === 'privilege');
+  const merch = shelf(data.items.filter(i => i.kind === 'merch'));
+  const privileges = shelf(data.items.filter(i => i.kind === 'privilege'));
+  const onBuy = isMainAdmin ? null : setBuying;
+  const openOrders = data.orders.filter(o => ['new', 'ready'].includes(o.status)).length;
+  const tabs = [['shop', 'Витрина'], ...(isMainAdmin ? [] : [['orders', `Мои заказы${openOrders ? ` · ${openOrders}` : ''}`]]), ...(isAdmin ? [['admin', 'Управление']] : [])];
 
   return (
     <div className="container shop-page">
       {header}
-      <section className="shop-wallet" aria-label="Мои биты">
+      {!isMainAdmin && <section className="shop-wallet" aria-label="Мои биты">
         <span className="shop-wallet-icon" aria-hidden="true"><Coins size={28} {...ICON} /></span>
         <div className="shop-wallet-text">
           <p className="shop-wallet-amount tabular">{bits(b.available)}</p>
           <p className="shop-wallet-meta tabular">заработано {b.earned}{b.granted ? ` · призы и начисления ${b.granted > 0 ? '+' : ''}${b.granted}` : ''}{b.spent ? ` · потрачено ${b.spent}` : ''}</p>
         </div>
         <Link to="/profile#achievements" className="btn btn-secondary btn-sm">Как заработать</Link>
-      </section>
+      </section>}
 
       <div className="segmented shop-tabs" role="group" aria-label="Раздел магазина">
-        {[['shop', 'Витрина'], ['orders', `Мои заказы${data.orders.filter(o => ['new', 'ready'].includes(o.status)).length ? ` · ${data.orders.filter(o => ['new', 'ready'].includes(o.status)).length}` : ''}`], ...(isAdmin ? [['admin', 'Управление']] : [])].map(([k, l]) => (
+        {tabs.map(([k, l]) => (
           <button key={k} type="button" className={`segmented-item ${tab === k ? 'active' : ''}`} aria-pressed={tab === k} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
@@ -322,8 +329,8 @@ const Shop = () => {
         <div className="empty-state"><Gift size={32} {...ICON} /><p>Витрина пока пустая — скоро здесь появится мерч ИВИТШ.</p></div>
       ) : (
         <>
-          {merch.length > 0 && (<><h2 className="shop-section-title">Мерч</h2><ul className="shop-grid">{merch.map(i => <ItemCard key={i.id} item={i} available={b.available} onBuy={setBuying} />)}</ul></>)}
-          {privileges.length > 0 && (<><h2 className="shop-section-title">Привилегии</h2><ul className="shop-grid">{privileges.map(i => <ItemCard key={i.id} item={i} available={b.available} onBuy={setBuying} />)}</ul></>)}
+          {merch.length > 0 && (<><h2 className="shop-section-title">Мерч</h2><ul className="shop-grid">{merch.map(i => <ItemCard key={i.id} item={i} available={b.available} onBuy={onBuy} />)}</ul></>)}
+          {privileges.length > 0 && (<><h2 className="shop-section-title">Привилегии</h2><ul className="shop-grid">{privileges.map(i => <ItemCard key={i.id} item={i} available={b.available} onBuy={onBuy} />)}</ul></>)}
         </>
       ))}
 

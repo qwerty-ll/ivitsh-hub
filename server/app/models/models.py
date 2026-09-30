@@ -498,7 +498,7 @@ class Booking(Base):
 
 
 class Tournament(Base):
-    """A tribe tournament (like the tribes of School 21): students are split at random into equal tribes,
+    """A tribe tournament: students are split at random into equal tribes,
     which compete on the points their members earn during it, plus awards from the administration."""
     __tablename__ = "tournaments"
 

@@ -23,7 +23,13 @@ export const SECTIONS = {
   privacy: { label: 'Конфиденциальность', short: 'Cookie', path: '/privacy', Icon: Lock, hue: 'slate' },
 };
 
-export const NAV_ORDER = ['dashboard', 'calendar', 'schedule', 'tasks', 'associations', 'events', 'tribes', 'shop', 'booking', 'forum', 'map', 'teachers', 'faq', 'profile'];
+// Sidebar groups; the profile opens from the user button at the bottom of the sidebar.
+export const NAV_GROUPS = [
+  { title: null, items: ['dashboard'] },
+  { title: 'Учёба', items: ['calendar', 'schedule', 'tasks'] },
+  { title: 'Студжизнь', items: ['associations', 'events', 'tribes', 'shop', 'booking'] },
+  { title: 'Помощь', items: ['forum', 'map', 'teachers', 'faq'] },
+];
 
 // Mobile bottom bar: the sections students open most; the rest stay in the menu.
 // Guests have no calendar of their own, so they get the public timetable in its place.

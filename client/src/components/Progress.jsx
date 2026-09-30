@@ -57,14 +57,16 @@ const BadgeTile = ({ b }) => {
       </span>
       <span className="badge-tile-text">
         <span className="badge-tile-title">{b.title}</span>
-        <span className="badge-tile-tier">{tier ? tier.label : 'Ещё не получено'}</span>
+        {tier && <span className="badge-tile-tier">{tier.label}</span>}
         {b.next !== null ? (
           <>
             <span className="badge-tile-hint">{b.hint}</span>
-            <span className="progress badge-tile-progress" aria-label={`${b.value} из ${b.next}`}>
-              <span className="progress-value" style={{ transform: `scaleX(${share})` }} />
+            <span className="badge-tile-meter">
+              <span className="progress badge-tile-progress" aria-hidden="true">
+                <span className="progress-value" style={{ transform: `scaleX(${share})` }} />
+              </span>
+              <span className="badge-tile-count tabular">{b.value}/{b.next}</span>
             </span>
-            <span className="badge-tile-count tabular">{b.value} из {b.next}</span>
           </>
         ) : <span className="badge-tile-hint">Все ступени пройдены</span>}
       </span>

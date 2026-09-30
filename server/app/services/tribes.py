@@ -1,8 +1,8 @@
 """Tribe tournaments: a random, balanced split of students into tribes and the tribes' standings.
 
-As in School 21 (and the coalitions of 42 it comes from): every student lands in one tribe at random; the tribe's
-score is what its members earn by being active (the same confirmed facts as personal bits) plus awards and
-penalties from the administration; at the end the top tribes' members get bits for the shop.
+Every student lands in one tribe at random; the tribe's score is what its members earn by being active (the same
+confirmed facts as personal bits) plus awards and penalties from the administration; at the end the top tribes'
+members get bits for the shop.
 """
 import random
 import time as clock
@@ -92,8 +92,14 @@ def standings(db: Session, t: models.Tournament) -> Dict:
             "contributions": contributions,
         })
     tribes.sort(key=lambda x: (-x["points"], x["name"]))
+    prev = None
     for i, tribe in enumerate(tribes, start=1):
-        tribe["rank"] = tribe["place"] or i
+        # Equal points share a place, as at the finish
+        if tribe["place"]:
+            tribe["rank"] = tribe["place"]
+        else:
+            tribe["rank"] = tribes[i - 2]["rank"] if prev is not None and tribe["points"] == prev else i
+        prev = tribe["points"]
     result = {"tribes": tribes, "computed_at": datetime.now(timezone.utc).isoformat()}
     _cache[t.id] = (clock.time(), result)
     return result

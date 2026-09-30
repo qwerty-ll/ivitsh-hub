@@ -2,7 +2,7 @@ import React from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { PanelLeftClose, PanelLeftOpen, LogIn, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { SECTIONS, NAV_ORDER } from '../data/sections';
+import { SECTIONS, NAV_GROUPS } from '../data/sections';
 
 const ICON = { size: 20, strokeWidth: 1.75, 'aria-hidden': true };
 
@@ -13,7 +13,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen })
   const { pathname } = useLocation();
   const { user, isLoggedIn, isAdmin } = useAuth();
 
-  const items = isAdmin ? [...NAV_ORDER, 'admin'] : NAV_ORDER;
+  const groups = isAdmin ? [...NAV_GROUPS, { title: 'Управление', items: ['admin'] }] : NAV_GROUPS;
 
   const goTo = (path) => {
     navigate(path);
@@ -37,30 +37,40 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen })
       </NavLink>
 
       <nav className="sidebar-nav">
-        <ul>
-          {items.map((id) => {
-            const { label, path, Icon, hue } = SECTIONS[id];
-            return (
-              <li key={id}>
-                <NavLink
-                  to={path}
-                  end={path === '/'}
-                  className={({ isActive }) => `sidebar-link hue-${hue} ${isActive ? 'active' : ''}`}
-                  title={isCollapsed ? label : undefined}
-                  onClick={() => setIsMobileOpen(false)}
-                >
-                  <Icon {...ICON} />
-                  <span className="sidebar-link-label">{label}</span>
-                </NavLink>
-              </li>
-            );
-          })}
-        </ul>
+        {groups.map(({ title, items }) => (
+          <div key={title || 'main'} className="sidebar-group" role="group" aria-label={title || undefined}>
+            {title && <p className="sidebar-group-title" aria-hidden="true">{title}</p>}
+            <ul>
+              {items.map((id) => {
+                const { label, path, Icon, hue } = SECTIONS[id];
+                return (
+                  <li key={id}>
+                    <NavLink
+                      to={path}
+                      end={path === '/'}
+                      className={({ isActive }) => `sidebar-link hue-${hue} ${isActive ? 'active' : ''}`}
+                      title={isCollapsed ? label : undefined}
+                      onClick={() => setIsMobileOpen(false)}
+                    >
+                      <Icon {...ICON} />
+                      <span className="sidebar-link-label">{label}</span>
+                    </NavLink>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
       </nav>
 
       <div className="sidebar-footer">
         {isLoggedIn ? (
-          <button className="sidebar-user" onClick={() => goTo('/profile')} title={isCollapsed ? user.fullName : undefined}>
+          <button
+            className={`sidebar-user hue-cyan ${pathname === '/profile' ? 'active' : ''}`}
+            onClick={() => goTo('/profile')}
+            title={isCollapsed ? user.fullName : 'Личный кабинет'}
+            aria-current={pathname === '/profile' ? 'page' : undefined}
+          >
             <span className="sidebar-user-avatar">
               {user.photoUrl ? (
                 <img src={user.photoUrl} alt="" onError={(e) => { e.target.style.display = 'none'; }} />

@@ -23,7 +23,7 @@ const plural = (n, [one, few, many]) => {
 const TribeRow = ({ tribe, leader, mine, open, onToggle }) => (
   <li className={`tribe-row hue-${tribe.color} ${mine ? 'is-mine' : ''}`}>
     <button type="button" className="tribe-row-main" aria-expanded={open} onClick={onToggle}>
-      <span className={`tribe-place tabular ${tribe.rank <= 3 ? `is-top-${tribe.rank}` : ''}`}>{tribe.rank}</span>
+      <span className={`tribe-place tabular ${tribe.rank <= 3 && tribe.points > 0 ? `is-top-${tribe.rank}` : ''}`}>{tribe.rank}</span>
       <span className="tribe-name-block">
         <span className="tribe-name">
           {tribe.name}
@@ -39,7 +39,7 @@ const TribeRow = ({ tribe, leader, mine, open, onToggle }) => (
           <span className="progress-value" style={{ transform: `scaleX(${leader > 0 ? Math.max(0, tribe.points) / leader : 0})` }} />
         </span>
       </span>
-      <span className="tribe-points tabular">{tribe.points}<span>очков</span></span>
+      <span className="tribe-points tabular">{tribe.points}<span>{plural(Math.abs(tribe.points), ['очко', 'очка', 'очков'])}</span></span>
       <ChevronDown size={18} className="dash-chevron" {...ICON} />
     </button>
     {open && (
@@ -204,7 +204,7 @@ const Tribes = () => {
         <SectionIcon section="tribes" size="lg" />
         <div>
           <h1>Трайбы</h1>
-          <p className="page-subtitle">Турнир команд, как в Школе 21: все студенты случайно и поровну делятся на трайбы, каждый приносит своему трайбу очки своей активностью.</p>
+          <p className="page-subtitle">Турнир команд: все студенты случайно и поровну делятся на трайбы, каждый приносит своему трайбу очки своей активностью.</p>
         </div>
       </div>
       {isAdmin && <button type="button" className="btn btn-primary" onClick={() => setFormOpen(true)}><Plus size={16} {...ICON} />Новый турнир</button>}
@@ -262,8 +262,10 @@ const Tribes = () => {
               <p className="tribe-hero-dates">{fmt(t.starts_on)} — {fmt(t.ends_on)}</p>
               {myTribe ? (
                 <p className="tribe-hero-mine">
-                  Вы в трайбе <strong>«{myTribe.name}»</strong> — {myTribe.rank} место.
-                  {t.my_points !== null && <> Ваш вклад: <strong className="tabular">{t.my_points}</strong> очков{t.my_rank_in_tribe ? `, ${t.my_rank_in_tribe}-й в трайбе` : ''}.</>}
+                  Вы в трайбе <strong>«{myTribe.name}»</strong>{t.tribes.some(x => x.points !== 0) ? ` — ${myTribe.rank} место` : ''}.
+                  {t.my_points !== null && (t.my_points > 0
+                    ? <> Ваш вклад: <strong className="tabular">{t.my_points}</strong> {plural(t.my_points, ['очко', 'очка', 'очков'])}{t.my_rank_in_tribe ? `, ${t.my_rank_in_tribe}-й в трайбе` : ''}.</>
+                    : <> Первые очки — за мероприятие, собрание или ДЗ группы.</>)}
                 </p>
               ) : <p className="tribe-hero-mine">Вы не участвуете в этом турнире.</p>}
             </div>

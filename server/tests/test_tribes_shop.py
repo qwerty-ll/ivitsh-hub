@@ -62,6 +62,8 @@ def test_newcomers_join_the_smallest_tribe_and_students_see_the_standings(app, f
     view = late.get("/api/v1/tribes/current").json()["tournament"]
     assert view["my_tribe_id"] is not None and sorted(tr["members"] for tr in view["tribes"]) == [2, 3]
     assert not view["can_manage"]
+    # Nobody has points yet: every tribe shares the first place
+    assert [tr["rank"] for tr in view["tribes"]] == [1, 1]
     # Students cannot run it
     assert late.post(f"/api/v1/tribes/tournaments/{t['id']}/finish", headers=CSRF).status_code == 403
 
