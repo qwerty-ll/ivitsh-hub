@@ -33,7 +33,6 @@ class User(Base):
     pd_consent_version = Column(String, nullable=True)
     # Contacts the student chose to share: seen by leaders of their associations
     # (and, for a leader, by every signed-in student in the catalog)
-    tg_username = Column(String, nullable=True)
     vk_url = Column(String, nullable=True)
     max_contact = Column(String, nullable=True)
     # Last request with a valid session, refreshed at most every few minutes ("active this semester")

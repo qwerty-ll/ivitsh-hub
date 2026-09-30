@@ -1,4 +1,4 @@
-"""Associations and memberships; users' contacts (Telegram, VK, Max) and last_seen_at.
+"""Associations and memberships; users' contacts (VK, Max) and last_seen_at.
 
 Revision ID: 0007
 Revises: 0006
@@ -48,7 +48,6 @@ def upgrade() -> None:
     op.create_index(op.f('ix_memberships_user_id'), 'memberships', ['user_id'], unique=False)
     op.create_index(op.f('ix_memberships_association_id'), 'memberships', ['association_id'], unique=False)
 
-    op.add_column('users', sa.Column('tg_username', sa.String(), nullable=True))
     op.add_column('users', sa.Column('vk_url', sa.String(), nullable=True))
     op.add_column('users', sa.Column('max_contact', sa.String(), nullable=True))
     op.add_column('users', sa.Column('last_seen_at', sa.DateTime(timezone=True), nullable=True))
@@ -59,7 +58,6 @@ def downgrade() -> None:
         batch_op.drop_column('last_seen_at')
         batch_op.drop_column('max_contact')
         batch_op.drop_column('vk_url')
-        batch_op.drop_column('tg_username')
     op.drop_index(op.f('ix_memberships_association_id'), table_name='memberships')
     op.drop_index(op.f('ix_memberships_user_id'), table_name='memberships')
     op.drop_index(op.f('ix_memberships_id'), table_name='memberships')

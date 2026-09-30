@@ -229,7 +229,7 @@ def update_my_profile(
             # The EIOS id belonged to the old group
             current_user.group_number = group
             current_user.eios_group_id = None
-    for field in ("tg_username", "vk_url", "max_contact"):
+    for field in ("vk_url", "max_contact"):
         value = getattr(req, field)
         if value is not None:
             setattr(current_user, field, value or None)

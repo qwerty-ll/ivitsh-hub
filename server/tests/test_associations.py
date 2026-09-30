@@ -34,7 +34,7 @@ def _setup(app, fake_eios, db):
     admin = login_admin(app)
     aid = _create(admin, description="Олимпиады ICPC")
     leader = _student(app, fake_eios, 1, "Лебедев Глеб Андреевич")
-    leader.patch("/api/v1/auth/me", json={"tg_username": "@gleb_lebedev", "vk_url": "https://vk.com/id42"}, headers=CSRF)
+    leader.patch("/api/v1/auth/me", json={"vk_url": "https://vk.com/id42", "max_contact": "gleb_l"}, headers=CSRF)
     assert admin.put(f"/api/v1/admin/associations/{aid}/leaders/{_user_id(db, '24-isbo-001')}", headers=CSRF).status_code == 200
     student = _student(app, fake_eios, 2, "Петрова Анна Сергеевна")
     return admin, aid, leader, student
@@ -44,9 +44,9 @@ def test_catalog_shows_leader_contacts_only_to_signed_in_users(app, fake_eios, d
     _, aid, _, student = _setup(app, fake_eios, db)
     guest_item = client.get("/api/v1/associations").json()[0]
     assert guest_item["leaders"][0]["full_name"] == "Лебедев Глеб Андреевич" and guest_item["listed_leader"] is None
-    assert guest_item["leaders"][0]["tg_username"] is None and guest_item["my_status"] is None
+    assert guest_item["leaders"][0]["vk_url"] is None and guest_item["my_status"] is None
     item = student.get(f"/api/v1/associations/{aid}").json()
-    assert item["leaders"][0]["tg_username"] == "gleb_lebedev" and item["leaders"][0]["vk_url"] == "id42"
+    assert item["leaders"][0]["vk_url"] == "id42" and item["leaders"][0]["max_contact"] == "gleb_l"
     assert item["member_count"] == 1 and item["can_manage"] is False and item["members"] == []
 
 
@@ -140,22 +140,22 @@ def test_leader_hint_suggests_the_signed_in_student(app, fake_eios, db):
 
 def test_contacts_are_normalized_and_validated(app, fake_eios):
     c = _student(app, fake_eios, 7, "Смирнов Макар Олегович")
-    r = c.patch("/api/v1/auth/me", json={"tg_username": "https://t.me/makar_s", "vk_url": "vk.com/makar.smirnov", "max_contact": "+7 900 000-00-00"}, headers=CSRF)
+    r = c.patch("/api/v1/auth/me", json={"vk_url": "https://vk.com/makar.smirnov", "max_contact": "+7 900 000-00-00"}, headers=CSRF)
     assert r.status_code == 200
-    assert (r.json()["tg_username"], r.json()["vk_url"], r.json()["max_contact"]) == ("makar_s", "makar.smirnov", "+7 900 000-00-00")
-    assert c.patch("/api/v1/auth/me", json={"tg_username": "a b"}, headers=CSRF).status_code == 422
+    assert (r.json()["vk_url"], r.json()["max_contact"]) == ("makar.smirnov", "+7 900 000-00-00")
     assert c.patch("/api/v1/auth/me", json={"vk_url": "https://evil.example/x"}, headers=CSRF).status_code == 422
+    assert c.patch("/api/v1/auth/me", json={"max_contact": "<script>"}, headers=CSRF).status_code == 422
     # An empty value clears the contact, a missing one keeps it
-    r = c.patch("/api/v1/auth/me", json={"tg_username": ""}, headers=CSRF)
-    assert r.json()["tg_username"] is None and r.json()["vk_url"] == "makar.smirnov"
+    r = c.patch("/api/v1/auth/me", json={"vk_url": ""}, headers=CSRF)
+    assert r.json()["vk_url"] is None and r.json()["max_contact"] == "+7 900 000-00-00"
 
 
 def test_member_contacts_are_for_leaders_only(app, fake_eios, db):
     _, aid, leader, student = _setup(app, fake_eios, db)
-    student.patch("/api/v1/auth/me", json={"tg_username": "anna_petrova"}, headers=CSRF)
+    student.patch("/api/v1/auth/me", json={"vk_url": "anna_petrova"}, headers=CSRF)
     student.post(f"/api/v1/associations/{aid}/apply", json={}, headers=CSRF)
     applicant = leader.get(f"/api/v1/associations/{aid}").json()["applications"][0]
-    assert applicant["tg_username"] == "anna_petrova" and applicant["group_number"] == "24-ИСбо-1"
+    assert applicant["vk_url"] == "anna_petrova" and applicant["group_number"] == "24-ИСбо-1"
     other = _student(app, fake_eios, 3, "Сидоров Пётр Ильич")
     detail = other.get(f"/api/v1/associations/{aid}").json()
     assert detail["applications"] == [] and detail["members"] == []

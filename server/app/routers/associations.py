@@ -66,7 +66,6 @@ def _person(user: models.User, with_contacts: bool) -> Dict:
         "user_id": user.id,
         "full_name": user.full_name,
         "group_number": user.group_number,
-        "tg_username": user.tg_username if with_contacts else None,
         "vk_url": user.vk_url if with_contacts else None,
         "max_contact": user.max_contact if with_contacts else None,
     }

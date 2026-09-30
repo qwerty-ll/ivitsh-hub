@@ -25,7 +25,7 @@ const PersonRow = ({ person, children }) => (
         {person.status === 'pending' && person.created_at && <span>заявка от {formatDate(person.created_at)}</span>}
       </span>
       {person.message && <p className="assoc-person-note">«{person.message}»</p>}
-      <ContactLinks tg={person.tg_username} vk={person.vk_url} max={person.max_contact} name={person.full_name}
+      <ContactLinks vk={person.vk_url} max={person.max_contact} name={person.full_name}
         empty={<span className="assoc-muted">Контакты не указаны</span>} />
     </div>
     {children && <div className="assoc-person-actions">{children}</div>}
@@ -278,7 +278,7 @@ const AssociationDetail = () => {
                   <li key={l.user_id}>
                     <span className="assoc-person-name">{l.full_name}</span>
                     {isLoggedIn
-                      ? <ContactLinks tg={l.tg_username} vk={l.vk_url} max={l.max_contact} name={l.full_name}
+                      ? <ContactLinks vk={l.vk_url} max={l.max_contact} name={l.full_name}
                           empty={<span className="assoc-muted">Контакты пока не указаны</span>} />
                       : <span className="assoc-muted">Контакты видны после входа</span>}
                   </li>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Send, MessageCircle, AtSign } from 'lucide-react';
+import { MessageCircle, AtSign } from 'lucide-react';
 
 const ICON = { size: 14, strokeWidth: 1.75, 'aria-hidden': true };
 
@@ -7,20 +7,14 @@ const ICON = { size: 14, strokeWidth: 1.75, 'aria-hidden': true };
 const maxHref = (value) => (/^https:\/\/max\.ru\//i.test(value) ? value : null);
 
 /**
- * A person's contacts as they shared them: Telegram and VK open the messenger, Max shows the text.
+ * A person's contacts as they shared them: VK opens the messenger, Max shows the text (or its link).
  * Renders nothing when there are none, unless `empty` is given.
  */
-const ContactLinks = ({ tg, vk, max, name = '', empty = null }) => {
-  if (!tg && !vk && !max) return empty;
+const ContactLinks = ({ vk, max, name = '', empty = null }) => {
+  if (!vk && !max) return empty;
   const who = name ? ` — ${name}` : '';
   return (
     <span className="contact-links">
-      {tg && (
-        <a className="contact-link" href={`https://t.me/${tg}`} target="_blank" rel="noopener noreferrer"
-          aria-label={`Telegram @${tg}${who}`}>
-          <Send {...ICON} />@{tg}
-        </a>
-      )}
       {vk && (
         <a className="contact-link" href={`https://vk.com/${vk}`} target="_blank" rel="noopener noreferrer"
           aria-label={`ВКонтакте ${vk}${who}`}>

@@ -5,23 +5,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # --- Contacts a student shares with association leaders ---
-# Accepted as a link or a bare name; stored as the bare name ("ivan_petrov", "id12345").
-_TG_PREFIX = re.compile(r"^(?:https?://)?(?:www\.)?(?:t\.me|telegram\.me)/|^@", re.IGNORECASE)
-_TG_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{3,31}$")
+# VK is accepted as a link or a bare name and stored as the bare name ("id12345", "ivan.petrov").
 _VK_PREFIX = re.compile(r"^(?:https?://)?(?:m\.|www\.)?vk\.(?:com|ru)/|^@", re.IGNORECASE)
 _VK_NAME = re.compile(r"^[A-Za-z0-9_.]{2,50}$")
 _UNSAFE_TEXT = re.compile(r"[<>\x00-\x1f]")
-
-
-def normalize_tg(value: Optional[str]) -> Optional[str]:
-    if value is None:
-        return None
-    value = _TG_PREFIX.sub("", value.strip()).strip("/")
-    if not value:
-        return ""
-    if not _TG_NAME.match(value):
-        raise ValueError("Telegram: укажите имя пользователя, например @ivan_petrov")
-    return value
 
 
 def normalize_vk(value: Optional[str]) -> Optional[str]:
@@ -58,14 +45,8 @@ class EiosLoginRequest(BaseModel):
 class UserUpdateProfile(BaseModel):
     group_number: Optional[str] = Field(None, max_length=50)
     # None leaves a contact as is, "" clears it
-    tg_username: Optional[str] = Field(None, max_length=100)
     vk_url: Optional[str] = Field(None, max_length=100)
     max_contact: Optional[str] = Field(None, max_length=64)
-
-    @field_validator("tg_username")
-    @classmethod
-    def clean_tg(cls, v: Optional[str]) -> Optional[str]:
-        return normalize_tg(v)
 
     @field_validator("vk_url")
     @classmethod
@@ -90,7 +71,6 @@ class UserResponse(BaseModel):
     userpictureurl: Optional[str] = None
     auth_source: str = "eios"
     is_blocked: bool = False
-    tg_username: Optional[str] = None
     vk_url: Optional[str] = None
     max_contact: Optional[str] = None
     created_at: datetime
@@ -279,7 +259,6 @@ class PersonContacts(BaseModel):
     user_id: int
     full_name: str
     group_number: Optional[str] = None
-    tg_username: Optional[str] = None
     vk_url: Optional[str] = None
     max_contact: Optional[str] = None
 

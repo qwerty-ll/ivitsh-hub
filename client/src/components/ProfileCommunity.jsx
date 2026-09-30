@@ -6,7 +6,7 @@ import { useToast } from '../context/ToastContext';
 import { associationsApi, authApi } from '../services/api';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
-const EMPTY = { tg_username: '', vk_url: '', max_contact: '' };
+const EMPTY = { vk_url: '', max_contact: '' };
 
 /** The student's associations: achievements for the approved ones, pending applications below. */
 export const ProfileAssociations = () => {
@@ -66,7 +66,7 @@ export const ProfileAssociations = () => {
   );
 };
 
-/** Telegram / VK / Max the student shares with leaders of their associations. */
+/** VK / Max the student shares with leaders of their associations. */
 export const ProfileContacts = () => {
   const toast = useToast();
   const [saved, setSaved] = useState(null);
@@ -76,7 +76,7 @@ export const ProfileContacts = () => {
 
   useEffect(() => {
     authApi.getMe().then(me => {
-      const values = { tg_username: me.tg_username || '', vk_url: me.vk_url || '', max_contact: me.max_contact || '' };
+      const values = { vk_url: me.vk_url || '', max_contact: me.max_contact || '' };
       setSaved(values);
       setForm(values);
     }).catch(() => setSaved(EMPTY));
@@ -90,12 +90,11 @@ export const ProfileContacts = () => {
     setError('');
     try {
       const me = await authApi.updateProfile({
-        tg_username: form.tg_username.trim(),
         vk_url: form.vk_url.trim(),
         max_contact: form.max_contact.trim(),
       });
       // The server returns the normalised values (a link becomes a bare name)
-      const values = { tg_username: me.tg_username || '', vk_url: me.vk_url || '', max_contact: me.max_contact || '' };
+      const values = { vk_url: me.vk_url || '', max_contact: me.max_contact || '' };
       setSaved(values);
       setForm(values);
       toast.show('Контакты сохранены', 'success');
@@ -126,7 +125,6 @@ export const ProfileContacts = () => {
           Все поля необязательные.
         </p>
         <div className="profile-contacts-grid">
-          {field('tg_username', 'contact-tg', 'Telegram', '@username')}
           {field('vk_url', 'contact-vk', 'ВКонтакте', 'vk.com/id…')}
           {field('max_contact', 'contact-max', 'Max', 'Ссылка или ник')}
         </div>
