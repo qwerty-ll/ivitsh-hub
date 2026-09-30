@@ -442,3 +442,11 @@ export const achievementsApi = {
   portfolio: (start, end) => apiFetch(`/api/v1/portfolio?start=${start}&end=${end}`),
   exportHref: (format, start, end) => `${API_BASE_URL}/api/v1/portfolio/export?format=${format}&start=${start}&end=${end}`,
 };
+
+// Coworking room 108 and laptops
+export const bookingApi = {
+  day: (day, days = 1) => apiFetch(`/api/v1/bookings?day=${day}&days=${days}`),
+  mine: () => apiFetch('/api/v1/bookings/mine'),
+  create: (data) => apiFetch('/api/v1/bookings', json('POST', data)),
+  cancel: (id, reason = '') => apiFetch(`/api/v1/bookings/${id}/cancel`, json('POST', { reason })),
+};

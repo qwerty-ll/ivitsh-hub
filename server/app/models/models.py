@@ -445,3 +445,32 @@ class ManualAchievement(Base):
 
     attachments = relationship("Attachment", back_populates="achievement", cascade="all, delete-orphan",
                                order_by="Attachment.created_at")
+
+
+BOOKING_ZONES = ("top", "bottom", "whole")
+
+
+class Booking(Base):
+    """A booking of coworking room 108 ("8 бит": the upper or lower part, or all of it) or of laptops.
+
+    Confirmed at once; an administrator may cancel it. Cancelled rows stay for the history.
+    """
+    __tablename__ = "bookings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    resource = Column(String, nullable=False)  # "room" | "laptops"
+    zone = Column(String, nullable=True)  # room: see BOOKING_ZONES
+    laptops = Column(Integer, nullable=True)  # laptops: how many
+    starts_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    ends_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    purpose = Column(String, nullable=False, default="", server_default="")
+    association_id = Column(Integer, ForeignKey("associations.id", ondelete="SET NULL"), nullable=True, index=True)
+    booked_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    cancel_reason = Column(String, nullable=True)
+
+    association = relationship("Association")
+    booked_by = relationship("User", foreign_keys=[booked_by_id])
+    cancelled_by = relationship("User", foreign_keys=[cancelled_by_id])

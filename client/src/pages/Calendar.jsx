@@ -54,6 +54,7 @@ const isDone = (item) => item.type === 'task' && (item.status === 'done' || item
 const subline = (item) => {
   if (item.type === 'lesson') return [item.kind, item.place].filter(Boolean).join(' · ');
   if (item.type === 'meeting') return [item.association?.name, item.place].filter(Boolean).join(' · ');
+  if (item.type === 'booking') return [item.association?.name, item.text].filter(Boolean).join(' · ');
   if (item.type === 'event') return [item.status ? 'вы записаны' : '', item.place].filter(Boolean).join(' · ');
   if (item.type === 'task') return item.association ? item.association.name : 'Личная задача';
   return TYPES.homework.one;
@@ -450,6 +451,7 @@ const Calendar = () => {
     else if (item.type === 'meeting') setMeetingId(item.ref_id);
     else if (item.type === 'task') navigate(`/tasks/${item.ref_id}`);
     else if (item.type === 'event') navigate(`/events/${item.ref_id}`);
+    else if (item.type === 'booking') navigate(`/booking?day=${dayKey(new Date(item.starts_at))}`);
     else setHwOpen(homework.find(h => h.id === item.ref_id) || { id: item.ref_id, subject: item.title, text: item.text, due_at: item.starts_at });
   };
 

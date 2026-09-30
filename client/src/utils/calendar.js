@@ -39,6 +39,7 @@ export const TYPES = {
   lesson: { label: 'Пары', one: 'Пара', hue: 'blue' },
   meeting: { label: 'Собрания', one: 'Собрание', hue: 'olive' },
   event: { label: 'Мероприятия', one: 'Мероприятие', hue: 'red' },
+  booking: { label: 'Бронь 108', one: 'Бронь', hue: 'cyan' },
   task: { label: 'Задачи', one: 'Задача', hue: 'teal' },
   homework: { label: 'ДЗ группы', one: 'ДЗ группы', hue: 'violet' },
 };

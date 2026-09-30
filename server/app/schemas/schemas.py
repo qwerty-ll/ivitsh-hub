@@ -654,7 +654,7 @@ class SdoCourseItem(BaseModel):
 
 class CalendarItem(BaseModel):
     """One entry: a lesson, a meeting, an event, a task deadline or a homework deadline."""
-    type: Literal["lesson", "meeting", "task", "homework", "event"]
+    type: Literal["lesson", "meeting", "task", "homework", "event", "booking"]
     id: str
     title: str
     starts_at: UtcDateTime
@@ -844,3 +844,65 @@ class PortfolioOut(BaseModel):
     start: date
     end: date
     rows: List[PortfolioRow]
+
+
+# --- Room 108 and laptops ---
+class BookingIn(BaseModel):
+    resource: Literal["room", "laptops"]
+    zone: Optional[Literal["top", "bottom", "whole"]] = None
+    laptops: Optional[int] = Field(None, ge=1, le=100)
+    starts_at: datetime
+    ends_at: datetime
+    purpose: str = Field("", max_length=300)
+    # Required for leaders; administrators may book for the administration
+    association_id: Optional[int] = None
+
+    @field_validator("purpose")
+    @classmethod
+    def clean_purpose(cls, v: str) -> str:
+        return " ".join(v.split())
+
+    @field_validator("starts_at", "ends_at")
+    @classmethod
+    def aware(cls, v: datetime) -> datetime:
+        return _utc_or_none(v)
+
+    @model_validator(mode="after")
+    def check(self):
+        if self.resource == "room" and not self.zone:
+            raise ValueError("Выберите часть помещения")
+        if self.resource == "laptops" and not self.laptops:
+            raise ValueError("Укажите, сколько ноутбуков нужно")
+        if self.ends_at <= self.starts_at:
+            raise ValueError("Конец брони должен быть позже начала")
+        return self
+
+
+class CancelIn(BaseModel):
+    reason: str = Field("", max_length=300)
+
+
+class BookingItem(BaseModel):
+    id: int
+    resource: str
+    zone: Optional[str] = None
+    laptops: Optional[int] = None
+    starts_at: UtcDateTime
+    ends_at: UtcDateTime
+    purpose: str = ""
+    association: Optional[AssociationRef] = None
+    booked_by: Optional[str] = None
+    cancelled_at: Optional[UtcDateTime] = None
+    cancelled_by: Optional[str] = None
+    cancel_reason: Optional[str] = None
+    mine: bool = False
+    can_cancel: bool = False
+
+
+class BookingDay(BaseModel):
+    open: str
+    close: str
+    laptops_total: int
+    # Leaders and administrators book; everyone signed in sees what is taken
+    can_book: bool
+    items: List[BookingItem]

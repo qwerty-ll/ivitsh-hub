@@ -131,6 +131,28 @@ async def get_calendar(
             "association": {"id": e.association.id, "name": e.association.name} if e.association else None,
         })
 
+    # Room 108 and laptops I booked
+    bookings = (
+        db.query(models.Booking)
+        .options(joinedload(models.Booking.association))
+        .filter(models.Booking.booked_by_id == user.id, models.Booking.cancelled_at.is_(None),
+                models.Booking.starts_at < until, models.Booking.ends_at > since)
+        .all()
+    )
+    zones = {"top": "верх", "bottom": "низ", "whole": "всё помещение"}
+    for b in bookings:
+        items.append({
+            "type": "booking",
+            "id": f"booking-{b.id}",
+            "ref_id": b.id,
+            "title": f"Б-108: {zones.get(b.zone, '')}" if b.resource == "room" else f"Ноутбуки: {b.laptops}",
+            "starts_at": b.starts_at,
+            "ends_at": b.ends_at,
+            "place": "Коворкинг «8 бит», Б-108",
+            "text": b.purpose or "",
+            "association": {"id": b.association.id, "name": b.association.name} if b.association else None,
+        })
+
     # My task cards with a deadline in range
     cards = (
         db.query(models.TaskAssignee)

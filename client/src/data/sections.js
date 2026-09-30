@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, CalendarDays, CalendarSearch, SquareKanban, Handshake, PartyPopper, MessageSquare, Map, Users, HelpCircle, UserSquare, Shield, Lock
+  LayoutDashboard, CalendarDays, CalendarSearch, SquareKanban, Handshake, PartyPopper, DoorOpen, MessageSquare, Map, Users, HelpCircle, UserSquare, Shield, Lock
 } from 'lucide-react';
 
 // One place for every section's name, route, icon and wayfinding hue.
@@ -11,6 +11,7 @@ export const SECTIONS = {
   tasks: { label: 'Задачи', short: 'Задачи', path: '/tasks', Icon: SquareKanban, hue: 'teal', hint: 'Канбан и дедлайны' },
   associations: { label: 'Объединения', short: 'Объединения', path: '/associations', Icon: Handshake, hue: 'olive', hint: 'Клубы, медиа, волонтёры' },
   events: { label: 'Мероприятия', short: 'События', path: '/events', Icon: PartyPopper, hue: 'red', hint: 'Запись и ПГАС' },
+  booking: { label: 'Бронь 108', short: 'Бронь', path: '/booking', Icon: DoorOpen, hue: 'cyan', hint: 'Коворкинг и ноутбуки' },
   forum: { label: 'Форум', short: 'Форум', path: '/forum', Icon: MessageSquare, hue: 'violet', hint: 'Спросить сокурсников' },
   map: { label: 'Карта кампуса', short: 'Карта', path: '/map', Icon: Map, hue: 'green', hint: 'Найти аудиторию' },
   teachers: { label: 'Преподаватели', short: 'Преподаватели', path: '/teachers', Icon: Users, hue: 'pink', hint: 'Кабинеты и почта' },
@@ -20,7 +21,7 @@ export const SECTIONS = {
   privacy: { label: 'Конфиденциальность', short: 'Cookie', path: '/privacy', Icon: Lock, hue: 'slate' },
 };
 
-export const NAV_ORDER = ['dashboard', 'calendar', 'schedule', 'tasks', 'associations', 'events', 'forum', 'map', 'teachers', 'faq', 'profile'];
+export const NAV_ORDER = ['dashboard', 'calendar', 'schedule', 'tasks', 'associations', 'events', 'booking', 'forum', 'map', 'teachers', 'faq', 'profile'];
 
 // Mobile bottom bar: the sections students open most; the rest stay in the menu.
 // Guests have no calendar of their own, so they get the public timetable in its place.

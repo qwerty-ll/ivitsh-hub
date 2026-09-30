@@ -74,6 +74,11 @@ class Settings:
         name = (os.getenv("DOCUMENT_ADDRESSEE_NAME") or "А. С. Борисову").strip()
         self.DOCUMENT_ADDRESSEE_NAME = "" if name == "-" else name
 
+        # Coworking room 108 and laptops: opening hours (Moscow time) and how many laptops there are
+        self.BOOKING_OPEN = os.getenv("BOOKING_OPEN", "08:00").strip()
+        self.BOOKING_CLOSE = os.getenv("BOOKING_CLOSE", "21:00").strip()
+        self.LAPTOPS_TOTAL = max(1, _int("LAPTOPS_TOTAL", 5))
+
         # Files attached to tasks and announcements: kept on disk here (a Docker volume), never in git
         self.UPLOAD_DIR = os.path.abspath(os.getenv("UPLOAD_DIR", "").strip() or "uploads")
         self.MAX_UPLOAD_MB = max(1, _int("MAX_UPLOAD_MB", 10))
