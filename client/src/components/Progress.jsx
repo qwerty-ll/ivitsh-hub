@@ -30,7 +30,10 @@ export const LevelCard = ({ data, compact = false }) => {
           <span className="level-name">{level.title}</span>
           <span className="level-index tabular">уровень {level.index}</span>
         </p>
-        <p className="level-points tabular"><strong>{bits(data.points)}</strong> · в этом семестре {data.semester_points}</p>
+        <p className="level-points tabular">
+          <strong>{bits(data.points)}</strong> заработано · в этом семестре {data.semester_points}
+          {data.balance && <> · <Link to="/shop" className="level-wallet">на счёте {data.balance.available}</Link></>}
+        </p>
         <div className="progress level-progress" role="progressbar" aria-label="До следующего уровня"
           aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(done * 100)}>
           <div className="progress-value" style={{ transform: `scaleX(${done})` }} />
@@ -76,18 +79,20 @@ export const BadgeGrid = ({ badges }) => {
 };
 
 /** How points are earned, so it is clear what counts */
-export const PointsRules = ({ rules }) => (
+export const PointsRules = ({ rules, caps }) => (
   <details className="points-rules">
     <summary>За что начисляются биты</summary>
     <ul>
-      <li>Мероприятие — {rules.event}, волонтёром — {rules.volunteer}</li>
-      <li>Собрание объединения (отмечено присутствие) — {rules.meeting}</li>
-      <li>Задача объединения сдана вовремя — {rules.task_on_time}, с опозданием — {rules.task_late}</li>
-      <li>Запись ДЗ для группы — {rules.homework} (до 10 за семестр)</li>
-      <li>Ответ на форуме — {rules.answer} (до 15 за семестр), ответ выбран лучшим — ещё {rules.solution}</li>
-      <li>Проведённое мероприятие объединения — {rules.organized}</li>
+      <li>Мероприятие — {rules.event}, волонтёром — {rules.volunteer} (мероприятий объединений — до {caps.association_events} за семестр, института — без лимита)</li>
+      <li>Собрание объединения (отмечено присутствие) — {rules.meeting}, до {caps.meetings} за семестр</li>
+      <li>Задача объединения, принятая руководителем, вовремя — {rules.task_on_time}, с опозданием — {rules.task_late}; до {caps.tasks} задач за семестр</li>
+      <li>Запись ДЗ для группы — {rules.homework} (до {caps.homework} за семестр)</li>
+      <li>Ответ на форуме — {rules.answer} (до {caps.answer} за семестр), ответ выбран лучшим — ещё {rules.solution}</li>
+      <li>Проведённое мероприятие объединения (пришли хотя бы трое) — {rules.organized}, до {caps.organized} за семестр</li>
     </ul>
-    <p>Считается только подтверждённое: присутствие отмечают организаторы, лучший ответ выбирает автор вопроса. Личные задачи баллов не дают.</p>
+    <p>Считается только подтверждённое: присутствие отмечают организаторы, задачу принимает руководитель, лучший ответ выбирает автор вопроса.
+      Задача засчитывается, только если у неё был срок, её поставил другой человек и она висела хотя бы 12 часов — мелкими задачками не накрутить.
+      Личные задачи баллов не дают. Биты тратятся в <Link to="/shop">магазине</Link>, призы трайбов добавляются к ним.</p>
   </details>
 );
 

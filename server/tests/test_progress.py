@@ -65,16 +65,25 @@ def test_leaders_archive_tasks_they_set(club):
     assert [c["title"] for c in member.get("/api/v1/tasks/my").json()] == ["Ролик"]
 
 
+def _age_task(db, task_id, hours):
+    t = db.query(models.Task).filter_by(id=task_id).one()
+    t.created_at = datetime.now(timezone.utc) - timedelta(hours=hours)
+    db.commit()
+
+
 def test_points_and_badges_come_from_confirmed_facts(club, db):
     admin, aid, leader, member = club
     past = datetime.now(timezone.utc) - timedelta(days=1)
     ev = leader.post("/api/v1/events", json={"title": "Квиз", "association_id": aid, "starts_at": past.isoformat(),
                                              "ends_at": (past + timedelta(hours=2)).isoformat(), "volunteer_limit": 3}, headers=CSRF).json()
     leader.post(f"/api/v1/events/{ev['id']}/registrations", json={"user_ids": [_uid(db, 2)], "role": "volunteer"}, headers=CSRF)
-    # A task handed in on time, and a personal one (does not count)
+    # A task accepted by the leader, handed in on time, set a day before
     due = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
     t = leader.post("/api/v1/tasks", json={"title": "Ролик", "association_id": aid, "to_all": True, "due_at": due}, headers=CSRF).json()
+    _age_task(db, t["id"], 24)
     member.patch(f"/api/v1/tasks/{t['id']}/status", json={"status": "review"}, headers=CSRF)
+    assert member.get("/api/v1/progress").json()["facts"]["on_time"] == 0  # not accepted yet
+    leader.patch(f"/api/v1/tasks/{t['id']}/status", json={"status": "done", "user_id": _uid(db, 2)}, headers=CSRF)
     p = member.post("/api/v1/tasks", json={"title": "Личная"}, headers=CSRF).json()
     member.patch(f"/api/v1/tasks/{p['id']}/status", json={"status": "done"}, headers=CSRF)
     for i in range(12):
@@ -84,13 +93,45 @@ def test_points_and_badges_come_from_confirmed_facts(club, db):
     assert r["facts"]["volunteer"] == 1 and r["facts"]["on_time"] == 1 and r["facts"]["homework"] == 12
     # 15 volunteering + 5 on time + homework capped at 10 × 2
     assert r["points"] == 15 + 5 + 20 and r["semester_points"] == 40
+    assert r["balance"] == {"earned": 40, "granted": 0, "spent": 0, "available": 40}
     assert r["level"]["title"] == "Новичок" and r["level"]["next_at"] == 50
     badges = {b["id"]: b for b in r["badges"]}
     assert badges["volunteer"]["level"] == 1 and badges["volunteer"]["next"] == 3
     assert badges["homework"]["level"] == 2 and badges["associations"]["level"] == 1
     assert badges["events"]["level"] == 0 and badges["events"]["hint"] == "Побывать на мероприятиях: 1"
-    # The leader organized an event that took place
-    assert {b["id"]: b["level"] for b in leader.get("/api/v1/progress").json()["badges"]}["organized"] == 1
+    # One person came: not "organized" yet (it takes three)
+    assert {b["id"]: b["level"] for b in leader.get("/api/v1/progress").json()["badges"]}["organized"] == 0
     # Marked absent: nothing
     leader.put(f"/api/v1/events/{ev['id']}/attendance", json={"user_ids": []}, headers=CSRF)
     assert member.get("/api/v1/progress").json()["facts"]["volunteer"] == 0
+
+
+def test_micro_tasks_do_not_farm_points(club, db):
+    """A leader cannot pump points with tiny tasks: fresh tasks, tasks without a deadline and self-assigned ones
+    do not count, and at most 15 tasks count per semester."""
+    admin, aid, leader, member = club
+    due = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+
+    def task(**extra):
+        t = leader.post("/api/v1/tasks", json={"title": "x", "association_id": aid, "to_all": True, **extra}, headers=CSRF).json()
+        member.patch(f"/api/v1/tasks/{t['id']}/status", json={"status": "review"}, headers=CSRF)
+        leader.patch(f"/api/v1/tasks/{t['id']}/status", json={"status": "done", "user_id": _uid(db, 2)}, headers=CSRF)
+        return t
+
+    task(due_at=due)                      # created and accepted within minutes
+    t = task()                            # no deadline
+    _age_task(db, t["id"], 48)
+    assert member.get("/api/v1/progress").json()["facts"]["on_time"] == 0
+    # The leader assigning themselves
+    own = leader.post("/api/v1/tasks", json={"title": "x", "association_id": aid, "assignee_ids": [_uid(db, 1)], "due_at": due}, headers=CSRF).json()
+    _age_task(db, own["id"], 48)
+    leader.patch(f"/api/v1/tasks/{own['id']}/status", json={"status": "done"}, headers=CSRF)
+    assert leader.get("/api/v1/progress").json()["facts"]["on_time"] == 0
+    # Twenty honest ones: only fifteen count
+    for _ in range(20):
+        t = leader.post("/api/v1/tasks", json={"title": "x", "association_id": aid, "to_all": True, "due_at": due}, headers=CSRF).json()
+        _age_task(db, t["id"], 24)
+        member.patch(f"/api/v1/tasks/{t['id']}/status", json={"status": "review"}, headers=CSRF)
+        leader.patch(f"/api/v1/tasks/{t['id']}/status", json={"status": "done", "user_id": _uid(db, 2)}, headers=CSRF)
+    r = member.get("/api/v1/progress").json()
+    assert r["facts"]["on_time"] == 20 and r["points"] == 15 * 5

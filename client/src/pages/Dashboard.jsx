@@ -18,8 +18,8 @@ import { dayKey, fitsSubgroup, readSubgroup, timeLabel } from '../utils/calendar
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 
-// The tab bar already has the calendar, tasks and associations; these are the other main sections (FAQ is in the menu)
-const SHORTCUTS = ['events', 'forum', 'map', 'teachers'];
+// The tab bar already has the calendar, tasks and associations; these are the other main sections (the rest is in the menu)
+const SHORTCUTS = ['events', 'tribes', 'shop', 'map'];
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const localIso = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;

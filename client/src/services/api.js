@@ -467,3 +467,32 @@ export const bookingApi = {
 export const progressApi = {
   get: () => apiFetch('/api/v1/progress'),
 };
+
+// Tribe tournaments
+export const tribesApi = {
+  current: () => apiFetch('/api/v1/tribes/current'),
+  tournaments: () => apiFetch('/api/v1/tribes/tournaments'),
+  tournament: (id) => apiFetch(`/api/v1/tribes/tournaments/${id}`),
+  create: (data) => apiFetch('/api/v1/tribes/tournaments', json('POST', data)),
+  start: (id) => apiFetch(`/api/v1/tribes/tournaments/${id}/start`, { method: 'POST' }),
+  finish: (id) => apiFetch(`/api/v1/tribes/tournaments/${id}/finish`, { method: 'POST' }),
+  remove: (id) => apiFetch(`/api/v1/tribes/tournaments/${id}`, { method: 'DELETE' }),
+  award: (tribeId, points, reason) => apiFetch(`/api/v1/tribes/${tribeId}/awards`, json('POST', { points, reason })),
+};
+
+// The merch shop
+export const shopApi = {
+  get: () => apiFetch('/api/v1/shop'),
+  buy: (itemId) => apiFetch(`/api/v1/shop/items/${itemId}/buy`, { method: 'POST' }),
+  cancel: (orderId) => apiFetch(`/api/v1/shop/orders/${orderId}/cancel`, { method: 'POST' }),
+  admin: (status = 'open') => apiFetch(`/api/v1/shop/admin?status=${status}`),
+  createItem: (data) => apiFetch('/api/v1/shop/items', json('POST', data)),
+  editItem: (id, data) => apiFetch(`/api/v1/shop/items/${id}`, json('PUT', data)),
+  removeItem: (id) => apiFetch(`/api/v1/shop/items/${id}`, { method: 'DELETE' }),
+  uploadImage: (id, file) => apiFetch(`/api/v1/shop/items/${id}/image?name=${encodeURIComponent(file.name)}`, {
+    method: 'POST', body: file, timeout: 120000, headers: { 'Content-Type': file.type || 'application/octet-stream' },
+  }),
+  setOrder: (id, status, comment = '') => apiFetch(`/api/v1/shop/orders/${id}`, json('PATCH', { status, comment })),
+  grant: (userId, amount, reason) => apiFetch('/api/v1/bits/grants', json('POST', { user_id: userId, amount, reason })),
+  imageSrc: (path) => `${API_BASE_URL}${path}`,
+};

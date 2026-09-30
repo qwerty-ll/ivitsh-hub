@@ -928,3 +928,94 @@ class BookingDay(BaseModel):
     # Leaders and administrators book; everyone signed in sees what is taken
     can_book: bool
     items: List[BookingItem]
+
+
+# --- Tribe tournaments ---
+class TournamentIn(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    starts_on: date
+    ends_on: date
+    tribe_names: List[str] = Field(..., min_length=2, max_length=8)
+    # Group names; empty = every student
+    groups: List[str] = Field(default_factory=list, max_length=100)
+    auto_join: bool = True
+    prize_1: int = Field(50, ge=0, le=10000)
+    prize_2: int = Field(30, ge=0, le=10000)
+    prize_3: int = Field(15, ge=0, le=10000)
+
+    @field_validator("title")
+    @classmethod
+    def clean_title(cls, v: str) -> str:
+        return _clean_title(v)
+
+    @field_validator("tribe_names")
+    @classmethod
+    def clean_names(cls, v: List[str]) -> List[str]:
+        names = [" ".join(n.split())[:40] for n in v]
+        if any(not n for n in names):
+            raise ValueError("У каждого трайба должно быть название")
+        if len({n.casefold() for n in names}) != len(names):
+            raise ValueError("Названия трайбов повторяются")
+        return names
+
+    @model_validator(mode="after")
+    def check(self):
+        if self.ends_on < self.starts_on:
+            raise ValueError("Турнир должен заканчиваться позже, чем начинается")
+        if (self.ends_on - self.starts_on).days > 366:
+            raise ValueError("Турнир не может длиться дольше года")
+        return self
+
+
+class AwardIn(BaseModel):
+    points: int = Field(..., ge=-10000, le=10000)
+    reason: str = Field(..., min_length=1, max_length=200)
+
+    @field_validator("points")
+    @classmethod
+    def not_zero(cls, v: int) -> int:
+        if v == 0:
+            raise ValueError("Укажите, сколько очков начислить или снять")
+        return v
+
+    @field_validator("reason")
+    @classmethod
+    def clean_reason(cls, v: str) -> str:
+        return _clean_title(v)
+
+
+class MoveIn(BaseModel):
+    tribe_id: int
+
+
+class GrantIn(BaseModel):
+    user_id: int
+    amount: int = Field(..., ge=-10000, le=10000)
+    reason: str = Field(..., min_length=1, max_length=200)
+
+    @field_validator("reason")
+    @classmethod
+    def clean_reason(cls, v: str) -> str:
+        return _clean_title(v)
+
+
+# --- Shop ---
+class ShopItemIn(BaseModel):
+    title: str = Field(..., min_length=1, max_length=120)
+    description: str = Field("", max_length=2000)
+    kind: Literal["merch", "privilege"] = "merch"
+    price: int = Field(..., ge=1, le=100000)
+    stock: Optional[int] = Field(None, ge=0, le=100000)
+    per_user_limit: Optional[int] = Field(None, ge=1, le=100)
+    is_active: bool = True
+    sort: int = Field(0, ge=-1000, le=1000)
+
+    @field_validator("title")
+    @classmethod
+    def clean_title(cls, v: str) -> str:
+        return _clean_title(v)
+
+
+class OrderStatusIn(BaseModel):
+    status: Literal["ready", "issued", "cancelled"]
+    comment: str = Field("", max_length=300)

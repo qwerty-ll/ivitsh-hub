@@ -108,7 +108,7 @@ const MyBoard = ({ cards, filter, onMove, onArchive, reload }) => {
               <h2 className="task-column-head" id={`col-${s.id}`}>
                 <span className="task-column-dot" aria-hidden="true" />{s.label}<span className="task-column-count tabular">{byStatus[s.id].length}</span>
               </h2>
-              {s.id === 'done' && <p className="task-column-hint">Через неделю задачи отсюда уходят в архив</p>}
+              {s.id === 'done' && <p className="task-column-hint">Через день задачи отсюда уходят в архив</p>}
               <div className="task-column-body">
                 {list.length === 0 && <p className="task-column-empty">{s.id === 'review' ? 'Сдайте задачу — она окажется здесь' : 'Пусто'}</p>}
                 {list.map(card => <TaskCard key={card.id} card={card} onMove={onMove} onDragStart={setDragged} onArchive={onArchive} />)}
@@ -208,7 +208,7 @@ const MyArchive = ({ cards, filter, onRestore }) => {
     return (
       <div className="empty-state">
         <h2 className="cm-empty-title">Архив пуст</h2>
-        <p>Сюда попадают задачи из колонки «Готово» — через неделю сами или сразу по кнопке с коробкой на карточке.</p>
+        <p>Сюда попадают задачи из колонки «Готово» — через день сами или сразу по кнопке с коробкой на карточке.</p>
       </div>
     );
   }

@@ -410,7 +410,7 @@ const Profile = () => {
               <div className="card achievements-card">
                 <LevelCard data={progress} />
                 <BadgeGrid badges={progress.badges} />
-                <PointsRules rules={progress.rules} />
+                <PointsRules rules={progress.rules} caps={progress.caps} />
               </div>
             </section>
           )}

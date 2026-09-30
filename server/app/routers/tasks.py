@@ -20,8 +20,8 @@ router = APIRouter(prefix="/api/v1", tags=["Tasks"])
 
 # Handed in: the moment of reaching one of these counts for "on time / late"
 _HANDED_IN = ("review", "done")
-# A "Готово" card leaves the board for the archive after this long
-ARCHIVE_AFTER = timedelta(days=7)
+# A "Готово" card leaves the board for the archive a day after it got there
+ARCHIVE_AFTER = timedelta(days=1)
 
 
 def _now() -> datetime:
@@ -400,7 +400,7 @@ def archive_my_card(
             raise HTTPException(status_code=400, detail="В архив уходят задачи со статусом «Готово»")
         card.archived_at = card.archived_at or _now()
     else:
-        # Back on the board for another week
+        # Back on the board for another day
         card.archived_at, card.status_changed_at = None, _now()
     db.commit()
     return {

@@ -19,6 +19,8 @@ const Associations = lazy(() => import('./pages/Associations'));
 const AssociationDetail = lazy(() => import('./pages/AssociationDetail'));
 const Events = lazy(() => import('./pages/Events'));
 const Booking = lazy(() => import('./pages/Booking'));
+const Tribes = lazy(() => import('./pages/Tribes'));
+const Shop = lazy(() => import('./pages/Shop'));
 const EventDetail = lazy(() => import('./pages/EventDetail'));
 const Forum = lazy(() => import('./pages/Forum'));
 const QuestionDetail = lazy(() => import('./pages/QuestionDetail'));
@@ -111,6 +113,8 @@ function App() {
             <Route path="/associations/:id" element={<AssociationDetail />} />
             <Route path="/events" element={<Events />} />
             <Route path="/booking" element={<Booking />} />
+            <Route path="/tribes" element={<Tribes />} />
+            <Route path="/shop" element={<Shop />} />
             <Route path="/events/:id" element={<EventDetail />} />
             <Route path="/forum" element={<Forum />} />
             <Route path="/forum/question/:id" element={<QuestionDetail />} />

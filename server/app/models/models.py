@@ -495,3 +495,122 @@ class Booking(Base):
     association = relationship("Association")
     booked_by = relationship("User", foreign_keys=[booked_by_id])
     cancelled_by = relationship("User", foreign_keys=[cancelled_by_id])
+
+
+class Tournament(Base):
+    """A tribe tournament (like the tribes of School 21): students are split at random into equal tribes,
+    which compete on the points their members earn during it, plus awards from the administration."""
+    __tablename__ = "tournaments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    starts_on = Column(Date, nullable=False)
+    ends_on = Column(Date, nullable=False)
+    status = Column(String, nullable=False, default="draft", server_default="draft")  # draft | active | finished
+    # Group names to draw from; empty = every student
+    groups = Column(Text, nullable=False, default="", server_default="")
+    # Students who sign in for the first time during the tournament join the smallest tribe
+    auto_join = Column(Boolean, nullable=False, default=True, server_default=true())
+    # Bits every member of the 1st, 2nd and 3rd tribe gets at the end
+    prize_1 = Column(Integer, nullable=False, default=50, server_default="50")
+    prize_2 = Column(Integer, nullable=False, default=30, server_default="30")
+    prize_3 = Column(Integer, nullable=False, default=15, server_default="15")
+    winner_tribe_id = Column(Integer, nullable=True)
+    created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+
+    tribes = relationship("Tribe", back_populates="tournament", cascade="all, delete-orphan", order_by="Tribe.id")
+
+
+class Tribe(Base):
+    __tablename__ = "tribes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    color = Column(String, nullable=False)  # a section hue name the client knows
+    # Frozen at the end of the tournament
+    final_points = Column(Integer, nullable=True)
+    place = Column(Integer, nullable=True)
+
+    tournament = relationship("Tournament", back_populates="tribes")
+    members = relationship("TribeMember", back_populates="tribe", cascade="all, delete-orphan")
+    awards = relationship("TribeAward", cascade="all, delete-orphan", order_by="TribeAward.created_at.desc()")
+
+
+class TribeMember(Base):
+    __tablename__ = "tribe_members"
+    __table_args__ = (UniqueConstraint("tournament_id", "user_id", name="uq_tribe_member"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True)
+    tribe_id = Column(Integer, ForeignKey("tribes.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    joined_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    tribe = relationship("Tribe", back_populates="members")
+    user = relationship("User")
+
+
+class TribeAward(Base):
+    """Points the administration gives a tribe (a hackathon won, a tribe challenge) or takes away (a penalty)."""
+    __tablename__ = "tribe_awards"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tribe_id = Column(Integer, ForeignKey("tribes.id", ondelete="CASCADE"), nullable=False, index=True)
+    points = Column(Integer, nullable=False)
+    reason = Column(String, nullable=False)
+    created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+
+class BitsGrant(Base):
+    """Bits added or taken by hand or as a tournament prize, on top of the ones computed from activity."""
+    __tablename__ = "bits_grants"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    amount = Column(Integer, nullable=False)
+    reason = Column(String, nullable=False)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="SET NULL"), nullable=True)
+    created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+
+class ShopItem(Base):
+    """Something to spend bits on: merch or a privilege. Handed out in person by the administration."""
+    __tablename__ = "shop_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=False, default="", server_default="")
+    kind = Column(String, nullable=False, default="merch", server_default="merch")  # merch | privilege
+    price = Column(Integer, nullable=False)
+    # None = unlimited
+    stock = Column(Integer, nullable=True)
+    per_user_limit = Column(Integer, nullable=True)
+    # The picture in UPLOAD_DIR (merch photos are not personal data: served to anyone)
+    image_name = Column(String, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True, server_default=true())
+    sort = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+
+class ShopOrder(Base):
+    __tablename__ = "shop_orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_id = Column(Integer, ForeignKey("shop_items.id", ondelete="SET NULL"), nullable=True, index=True)
+    # Kept as bought: the item may change or go
+    item_title = Column(String, nullable=False)
+    price = Column(Integer, nullable=False)
+    status = Column(String, nullable=False, default="new", server_default="new")  # new | ready | issued | cancelled
+    comment = Column(String, nullable=True)
+    handled_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User", foreign_keys=[user_id])
+    item = relationship("ShopItem")

@@ -25,8 +25,13 @@ POINTS = {
     "solution": 5,        # ... that the asker marked as the solution
     "organized": 20,      # a leader's event that took place with people
 }
-# Counted per semester at most: cheap actions cannot be farmed
-CAPS = {"homework": 10, "answer": 15}
+# Counted per semester at most, so nothing can be farmed. Institute events are set by the administration and
+# are not capped; everything an association leader creates (events, meetings, tasks) is.
+CAPS = {"homework": 10, "answer": 15, "tasks": 15, "meetings": 12, "association_events": 8, "organized": 5}
+# A task counts only if it lived this long before it was handed in (no "create and tick" micro-tasks)
+TASK_MIN_LIFETIME = timedelta(hours=12)
+# An organized event counts when this many other people came
+ORGANIZED_MIN_PEOPLE = 3
 
 LEVELS: List[Tuple[int, str]] = [
     (0, "Новичок"),
@@ -86,9 +91,11 @@ def facts(db: Session, user: models.User, bounds: Optional[Tuple[datetime, datet
         .filter(models.EventRegistration.user_id == user.id, models.EventRegistration.attended.isnot(False))
         .all()
     )
-    events = volunteer = 0
+    events = volunteer = association_events = 0
     for reg, event in regs:
         if _as_utc(event.ends_at) <= now and _in(event.starts_at, bounds):
+            if event.scope != "institute":
+                association_events += 1
             if reg.role == "volunteer":
                 volunteer += 1
             else:
@@ -102,17 +109,20 @@ def facts(db: Session, user: models.User, bounds: Optional[Tuple[datetime, datet
     )
 
     on_time = late = 0
+    # Only association tasks the leader accepted ("Готово"), with a deadline, set by someone else,
+    # that existed a while before being handed in. Personal tasks never count: anyone could tick them off.
     cards = (
-        db.query(models.TaskAssignee.completed_at, models.Task.due_at, models.Task.association_id)
+        db.query(models.TaskAssignee.completed_at, models.Task.due_at, models.Task.created_at)
         .join(models.Task, models.TaskAssignee.task_id == models.Task.id)
-        .filter(models.TaskAssignee.user_id == user.id, models.TaskAssignee.completed_at.isnot(None))
+        .filter(models.TaskAssignee.user_id == user.id, models.TaskAssignee.status == "done",
+                models.TaskAssignee.completed_at.isnot(None), models.Task.association_id.isnot(None),
+                models.Task.due_at.isnot(None), models.Task.created_by_id != user.id)
         .all()
     )
-    for completed, due, association_id in cards:
-        # Personal tasks do not count: anyone could tick them off
-        if association_id is None or not _in(completed, bounds):
+    for completed, due, created in cards:
+        if not _in(completed, bounds) or _as_utc(completed) - _as_utc(created) < TASK_MIN_LIFETIME:
             continue
-        if due is None or _as_utc(completed) <= _as_utc(due):
+        if _as_utc(completed) <= _as_utc(due):
             on_time += 1
         else:
             late += 1
@@ -135,25 +145,37 @@ def facts(db: Session, user: models.User, bounds: Optional[Tuple[datetime, datet
     if led:
         for event in db.query(models.Event).filter(models.Event.created_by_id == user.id,
                                                    models.Event.association_id.in_(led)).all():
-            took_place = any(r.attended is not False for r in event.registrations if r.user_id != user.id)
+            came = sum(r.attended is not False for r in event.registrations if r.user_id != user.id)
+            took_place = came >= ORGANIZED_MIN_PEOPLE
             if _as_utc(event.ends_at) <= now and took_place and _in(event.starts_at, bounds):
                 organized += 1
 
     return {
-        "events": events, "volunteer": volunteer, "meetings": meetings, "on_time": on_time, "late": late,
+        "events": events, "volunteer": volunteer, "association_events": association_events, "meetings": meetings, "on_time": on_time, "late": late,
         "homework": homework, "answers": answers, "solutions": solutions,
         "associations": associations, "organized": organized,
     }
 
 
 def points(f: Dict[str, int], capped: bool) -> int:
-    homework = min(f["homework"], CAPS["homework"]) if capped else f["homework"]
-    answers = min(f["answers"], CAPS["answer"]) if capped else f["answers"]
+    """Points of one period (a semester): the caps apply within it."""
+    def cap(value: int, key: str) -> int:
+        return min(value, CAPS[key]) if capped else value
+
+    # Association events beyond the cap stop counting; institute ones always count
+    extra = max(0, f["association_events"] - CAPS["association_events"]) if capped else 0
+    events, volunteer = f["events"], f["volunteer"]
+    # Drop the cheaper ones first: plain participation, then volunteering
+    drop_events = min(extra, events)
+    drop_volunteer = min(extra - drop_events, volunteer)
+    tasks_on_time = cap(f["on_time"], "tasks")
+    tasks_late = min(f["late"], max(0, CAPS["tasks"] - tasks_on_time)) if capped else f["late"]
     return (
-        f["events"] * POINTS["event"] + f["volunteer"] * POINTS["volunteer"] + f["meetings"] * POINTS["meeting"]
-        + f["on_time"] * POINTS["task_on_time"] + f["late"] * POINTS["task_late"]
-        + homework * POINTS["homework"] + answers * POINTS["answer"] + f["solutions"] * POINTS["solution"]
-        + f["organized"] * POINTS["organized"]
+        (events - drop_events) * POINTS["event"] + (volunteer - drop_volunteer) * POINTS["volunteer"]
+        + cap(f["meetings"], "meetings") * POINTS["meeting"]
+        + tasks_on_time * POINTS["task_on_time"] + tasks_late * POINTS["task_late"]
+        + cap(f["homework"], "homework") * POINTS["homework"] + cap(f["answers"], "answer") * POINTS["answer"]
+        + f["solutions"] * POINTS["solution"] + cap(f["organized"], "organized") * POINTS["organized"]
     )
 
 
@@ -166,12 +188,34 @@ def _semester_starts(first: date, last: date) -> List[Tuple[date, date]]:
     return out
 
 
+def earned_between(db: Session, user: models.User, first: date, last: date) -> int:
+    """Points earned from activity over a span of days, the caps applied semester by semester."""
+    total = 0
+    for s, e in _semester_starts(first, last):
+        total += points(facts(db, user, _msk_bounds(max(s, first), min(e, last))), capped=True)
+    return total
+
+
+def earned_total(db: Session, user: models.User) -> int:
+    joined = (_as_utc(user.created_at) or datetime.now(timezone.utc)).astimezone(timetable.MSK).date()
+    # From the start of the semester the account appeared in: organizers may add people to events before that
+    return earned_between(db, user, pgas.semester_of(joined)[0], timetable.msk_now().date())
+
+
+def balance(db: Session, user: models.User, earned: Optional[int] = None) -> Dict[str, int]:
+    """Bits to spend: earned from activity + granted (prizes, by hand) − spent in the shop (cancelled orders refunded)."""
+    earned = earned_total(db, user) if earned is None else earned
+    granted = db.query(func.coalesce(func.sum(models.BitsGrant.amount), 0)).filter(
+        models.BitsGrant.user_id == user.id).scalar() or 0
+    spent = db.query(func.coalesce(func.sum(models.ShopOrder.price), 0)).filter(
+        models.ShopOrder.user_id == user.id, models.ShopOrder.status != "cancelled").scalar() or 0
+    return {"earned": earned, "granted": int(granted), "spent": int(spent), "available": earned + int(granted) - int(spent)}
+
+
 def summary(db: Session, user: models.User) -> Dict:
     today = timetable.msk_now().date()
     total_facts = facts(db, user)
-    # Caps apply per semester: sum the semesters since the account appeared
-    joined = (_as_utc(user.created_at) or datetime.now(timezone.utc)).astimezone(timetable.MSK).date()
-    total = sum(points(facts(db, user, _msk_bounds(s, e)), capped=True) for s, e in _semester_starts(joined, today))
+    total = earned_total(db, user)
     sem_start, sem_end = pgas.semester_of(today)
     semester = points(facts(db, user, _msk_bounds(sem_start, sem_end)), capped=True)
 
@@ -199,4 +243,6 @@ def summary(db: Session, user: models.User) -> Dict:
         "badges": badges,
         "facts": total_facts,
         "rules": POINTS,
+        "caps": CAPS,
+        "balance": balance(db, user, earned=total),
     }
