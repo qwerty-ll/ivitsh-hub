@@ -21,7 +21,7 @@ import { dueInfo } from '../utils/tasks';
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 const WIDE_QUERY = '(min-width: 900px)';
 const PX_PER_MIN = 0.9;
-const TYPES_KEY = 'portal_cal_types';
+const TYPES_KEY = 'portal_cal_hidden';
 const ROOM_ON_MAP = /^Б-?\d{3}/i;
 
 const useWide = () => {
@@ -35,10 +35,11 @@ const useWide = () => {
   return wide;
 };
 
+// Hidden kinds are remembered (not shown ones), so a kind added later shows up by default
 const readTypes = () => {
   try {
-    const saved = JSON.parse(localStorage.getItem(TYPES_KEY));
-    if (Array.isArray(saved)) return saved.filter(t => TYPES[t]);
+    const hidden = JSON.parse(localStorage.getItem(TYPES_KEY));
+    if (Array.isArray(hidden)) return Object.keys(TYPES).filter(t => !hidden.includes(t));
   } catch { /* nothing saved */ }
   return Object.keys(TYPES);
 };
@@ -53,6 +54,7 @@ const isDone = (item) => item.type === 'task' && (item.status === 'done' || item
 const subline = (item) => {
   if (item.type === 'lesson') return [item.kind, item.place].filter(Boolean).join(' · ');
   if (item.type === 'meeting') return [item.association?.name, item.place].filter(Boolean).join(' · ');
+  if (item.type === 'event') return [item.status ? 'вы записаны' : '', item.place].filter(Boolean).join(' · ');
   if (item.type === 'task') return item.association ? item.association.name : 'Личная задача';
   return TYPES.homework.one;
 };
@@ -438,7 +440,7 @@ const Calendar = () => {
 
   const toggleType = (t) => setTypes((prev) => {
     const next = prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t];
-    try { localStorage.setItem(TYPES_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+    try { localStorage.setItem(TYPES_KEY, JSON.stringify(Object.keys(TYPES).filter(t => !next.includes(t)))); } catch { /* private mode */ }
     return next;
   });
   const pickSubgroup = (n) => { setSubgroup(n); saveSubgroup(n); };
@@ -447,6 +449,7 @@ const Calendar = () => {
     if (item.type === 'lesson') setLesson(item);
     else if (item.type === 'meeting') setMeetingId(item.ref_id);
     else if (item.type === 'task') navigate(`/tasks/${item.ref_id}`);
+    else if (item.type === 'event') navigate(`/events/${item.ref_id}`);
     else setHwOpen(homework.find(h => h.id === item.ref_id) || { id: item.ref_id, subject: item.title, text: item.text, due_at: item.starts_at });
   };
 
@@ -475,7 +478,7 @@ const Calendar = () => {
         <div>
           <h1>Календарь</h1>
           <p className="page-subtitle">
-            {isLoggedIn ? 'Пары, собрания объединений, дедлайны задач и ДЗ группы в одном месте.' : 'Пары, собрания, дедлайны и ДЗ группы в одном месте.'}
+            {isLoggedIn ? 'Пары, собрания объединений, мероприятия, дедлайны задач и ДЗ группы в одном месте.' : 'Пары, собрания, мероприятия, дедлайны и ДЗ группы в одном месте.'}
           </p>
         </div>
       </div>

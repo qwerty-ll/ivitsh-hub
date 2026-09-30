@@ -17,6 +17,8 @@ const Tasks = lazy(() => import('./pages/Tasks'));
 const TaskDetail = lazy(() => import('./pages/TaskDetail'));
 const Associations = lazy(() => import('./pages/Associations'));
 const AssociationDetail = lazy(() => import('./pages/AssociationDetail'));
+const Events = lazy(() => import('./pages/Events'));
+const EventDetail = lazy(() => import('./pages/EventDetail'));
 const Forum = lazy(() => import('./pages/Forum'));
 const QuestionDetail = lazy(() => import('./pages/QuestionDetail'));
 const CampusMap = lazy(() => import('./pages/CampusMap'));
@@ -106,6 +108,8 @@ function App() {
             <Route path="/tasks/:id" element={<TaskDetail />} />
             <Route path="/associations" element={<Associations />} />
             <Route path="/associations/:id" element={<AssociationDetail />} />
+            <Route path="/events" element={<Events />} />
+            <Route path="/events/:id" element={<EventDetail />} />
             <Route path="/forum" element={<Forum />} />
             <Route path="/forum/question/:id" element={<QuestionDetail />} />
             <Route path="/map" element={<CampusMap />} />

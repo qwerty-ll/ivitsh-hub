@@ -37,6 +37,8 @@ const toClientUser = (apiUser) => ({
   // EIOS timetable id of that group; missing for a group typed by hand
   groupId: apiUser.eios_group_id || null,
   role: apiUser.role || 'student',
+  // The .env administrator: the only one who grants and revokes administrator rights
+  mainAdmin: apiUser.auth_source === 'local',
   serverPhotoUrl: apiUser.userpictureurl || '',
 });
 
@@ -178,6 +180,7 @@ export const AuthProvider = ({ children }) => {
 
   const isLoggedIn = !!user;
   const isAdmin = user?.role === 'admin';
+  const isMainAdmin = isAdmin && !!user?.mainAdmin;
   const isModerator = user?.role === 'moderator';
   const isCurator = user?.role === 'curator';
   const canModerate = isAdmin || isModerator;
@@ -187,6 +190,7 @@ export const AuthProvider = ({ children }) => {
       user,
       isLoggedIn,
       isAdmin,
+      isMainAdmin,
       isModerator,
       isCurator,
       canModerate,

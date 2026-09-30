@@ -29,7 +29,7 @@ const focusEditor = (fieldId) => {
 };
 
 const AdminPanel = () => {
-  const { isAdmin, user } = useAuth();
+  const { isAdmin, user, isMainAdmin } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
   const tabRefs = useRef({});
@@ -888,7 +888,9 @@ const AdminPanel = () => {
         <section {...panelProps('users')}>
           <Toolbar
             title="Управление ролями пользователей"
-            description="Назначайте права Администратора или Модератора зарегистрированным студентам ИВИТШ."
+            description={isMainAdmin
+              ? 'Назначайте права Администратора или Модератора студентам и сотрудникам, которые хоть раз входили через ЭИОС.'
+              : 'Назначайте Модераторов. Права Администратора выдаёт и снимает только Главный Администратор.'}
           >
             <RefreshButton onClick={loadUsers} />
           </Toolbar>
@@ -913,7 +915,9 @@ const AdminPanel = () => {
                   {usersList.map(u => {
                     const isSuperAdmin = u.auth_source === 'local';
                     const isSelf = user && u.id === user.id;
-                    const locked = isSuperAdmin || isSelf;
+                    // Other administrators are managed by the main administrator only (the server checks it too)
+                    const otherAdmin = u.role === 'admin' && !isMainAdmin;
+                    const locked = isSuperAdmin || isSelf || otherAdmin;
                     return (
                       <tr key={u.id}>
                         <td className="admin-cell-main">
@@ -930,7 +934,7 @@ const AdminPanel = () => {
                         </td>
                         <td className="admin-cell-role" data-label="Роль">
                           {locked ? (
-                            <span className="admin-role-fixed" title="Роль этого пользователя нельзя изменить">
+                            <span className="admin-role-fixed" title={otherAdmin ? 'Права администратора меняет только Главный Администратор' : 'Роль этого пользователя нельзя изменить'}>
                               <Lock {...ICON} />
                               {isSuperAdmin ? 'Администратор ИВИТШ' : (ROLE_LABELS[u.role] || u.role)}
                               <span className="visually-hidden">, роль нельзя изменить</span>
@@ -944,7 +948,7 @@ const AdminPanel = () => {
                             >
                               <option value="student">{ROLE_LABELS.student}</option>
                               <option value="moderator">{ROLE_LABELS.moderator}</option>
-                              <option value="admin">{ROLE_LABELS.admin}</option>
+                              {isMainAdmin && <option value="admin">{ROLE_LABELS.admin}</option>}
                             </select>
                           )}
                         </td>

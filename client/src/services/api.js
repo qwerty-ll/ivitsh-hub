@@ -411,3 +411,34 @@ export const homeworkApi = {
   edit: (id, data) => apiFetch(`/api/v1/homework/${id}`, json('PUT', data)),
   remove: (id) => apiFetch(`/api/v1/homework/${id}`, { method: 'DELETE' }),
 };
+
+// Events: association and institute ones, registration, organizers' tools
+export const eventsApi = {
+  list: (view = 'upcoming', associationId = null) =>
+    apiFetch(`/api/v1/events?view=${view}${associationId ? `&association_id=${associationId}` : ''}`),
+  pendingFeedback: () => apiFetch('/api/v1/events/feedback/pending'),
+  get: (id) => apiFetch(`/api/v1/events/${id}`),
+  create: (data) => apiFetch('/api/v1/events', json('POST', data)),
+  edit: (id, data) => apiFetch(`/api/v1/events/${id}`, json('PUT', data)),
+  remove: (id) => apiFetch(`/api/v1/events/${id}`, { method: 'DELETE' }),
+  register: (id, role = 'participant') => apiFetch(`/api/v1/events/${id}/register`, json('POST', { role })),
+  unregister: (id) => apiFetch(`/api/v1/events/${id}/register`, { method: 'DELETE' }),
+  addPeople: (id, userIds, role = 'participant') =>
+    apiFetch(`/api/v1/events/${id}/registrations`, json('POST', { user_ids: userIds, role })),
+  addGroups: (id, groups, role = 'participant') =>
+    apiFetch(`/api/v1/events/${id}/groups`, json('POST', { groups, role })),
+  removePerson: (id, userId) => apiFetch(`/api/v1/events/${id}/registrations/${userId}`, { method: 'DELETE' }),
+  attendance: (id, userIds) => apiFetch(`/api/v1/events/${id}/attendance`, json('PUT', { user_ids: userIds })),
+  feedback: (id, rating, text) => apiFetch(`/api/v1/events/${id}/feedback`, json('POST', { rating, text })),
+  exportHref: (id) => `${API_BASE_URL}/api/v1/events/${id}/export`,
+};
+
+// Events added by hand and the ПГАС summary
+export const achievementsApi = {
+  list: () => apiFetch('/api/v1/achievements'),
+  create: (data) => apiFetch('/api/v1/achievements', json('POST', data)),
+  edit: (id, data) => apiFetch(`/api/v1/achievements/${id}`, json('PUT', data)),
+  remove: (id) => apiFetch(`/api/v1/achievements/${id}`, { method: 'DELETE' }),
+  portfolio: (start, end) => apiFetch(`/api/v1/portfolio?start=${start}&end=${end}`),
+  exportHref: (format, start, end) => `${API_BASE_URL}/api/v1/portfolio/export?format=${format}&start=${start}&end=${end}`,
+};

@@ -40,6 +40,16 @@ def post_files(db: Session, post_filter) -> List[str]:
     return [name for (name,) in rows]
 
 
+def event_files(db: Session, event_filter) -> List[str]:
+    rows = (
+        db.query(models.Attachment.stored_name)
+        .join(models.Event, models.Attachment.event_id == models.Event.id)
+        .filter(event_filter, models.Attachment.stored_name.isnot(None))
+        .all()
+    )
+    return [name for (name,) in rows]
+
+
 def catalog_order(association: models.Association):
     """Russian names first, then Latin ones ("IT профессионал", "Nexthub"), each alphabetically."""
     name = association.name.casefold()
@@ -395,10 +405,11 @@ def admin_delete(
     _: models.User = Depends(security.require_admin),
     db: Session = Depends(get_db),
 ):
-    """Deletes the association with its members, tasks and posts; hiding it (is_active) keeps the history."""
+    """Deletes the association with its members, tasks, posts and events; hiding it (is_active) keeps the history."""
     association = _get_association(db, association_id, include_inactive=True)
     files = (task_files(db, models.Task.association_id == association_id)
-             + post_files(db, models.AssociationPost.association_id == association_id))
+             + post_files(db, models.AssociationPost.association_id == association_id)
+             + event_files(db, models.Event.association_id == association_id))
     db.delete(association)
     db.commit()
     uploads.delete(files)

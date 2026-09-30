@@ -12,6 +12,9 @@ from app.services import uploads
 router = APIRouter(prefix="/api/v1", tags=["Admin"])
 
 
+_MAIN_ADMIN_ONLY = "Права администратора выдаёт и снимает только Главный Администратор ИВИТШ"
+
+
 def _get_manageable_user(db: Session, user_id: int, current_user: models.User) -> models.User:
     target_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not target_user:
@@ -20,6 +23,9 @@ def _get_manageable_user(db: Session, user_id: int, current_user: models.User) -
         raise HTTPException(status_code=400, detail="Это действие недоступно для собственной учётной записи")
     if security.is_protected_admin(target_user):
         raise HTTPException(status_code=400, detail="Это действие недоступно для Главного Администратора ИВИТШ")
+    # Other administrators are managed by the main one only (the .env account)
+    if target_user.role == "admin" and not security.is_protected_admin(current_user):
+        raise HTTPException(status_code=403, detail=_MAIN_ADMIN_ONLY)
     return target_user
 
 
@@ -51,6 +57,8 @@ def update_user_role(
     db: Session = Depends(get_db)
 ):
     target_user = _get_manageable_user(db, user_id, current_user)
+    if req.role == "admin" and not security.is_protected_admin(current_user):
+        raise HTTPException(status_code=403, detail=_MAIN_ADMIN_ONLY)
     target_user.role = req.role
     db.commit()
     db.refresh(target_user)
@@ -66,7 +74,11 @@ def delete_user(
     target_user = _get_manageable_user(db, user_id, current_user)
     # Personal tasks go with their owner (association tasks stay with the association)
     personal = (models.Task.association_id.is_(None)) & (models.Task.created_by_id == target_user.id)
-    files = task_files(db, personal)
+    files = task_files(db, personal) + [
+        name for (name,) in db.query(models.Attachment.stored_name)
+        .join(models.ManualAchievement, models.Attachment.achievement_id == models.ManualAchievement.id)
+        .filter(models.ManualAchievement.user_id == target_user.id, models.Attachment.stored_name.isnot(None))
+    ]
     db.query(models.Task).filter(personal).delete(synchronize_session=False)
     db.delete(target_user)
     db.commit()

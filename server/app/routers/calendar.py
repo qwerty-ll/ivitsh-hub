@@ -11,6 +11,7 @@ from app.db.database import get_db
 import app.models as models
 import app.schemas as schemas
 import app.core.security as security
+from app.routers.events import visible_events
 from app.routers.homework import group_key
 from app.services import sdo, timetable
 
@@ -111,6 +112,24 @@ async def get_calendar(
                 "text": m.agenda or "",
                 "association": {"id": m.association.id, "name": m.association.name},
             })
+
+    # Events: the ones I registered for, and every open event I may see (institute, my associations)
+    for e in visible_events(db, user):
+        starts, ends = schemas.as_utc(e.starts_at), schemas.as_utc(e.ends_at)
+        if not (starts < until and ends > since):
+            continue
+        mine = next((r for r in e.registrations if r.user_id == user.id), None)
+        items.append({
+            "type": "event",
+            "id": f"event-{e.id}",
+            "ref_id": e.id,
+            "title": e.title,
+            "starts_at": e.starts_at,
+            "ends_at": e.ends_at,
+            "place": e.place or "",
+            "status": mine.role if mine else None,
+            "association": {"id": e.association.id, "name": e.association.name} if e.association else None,
+        })
 
     # My task cards with a deadline in range
     cards = (

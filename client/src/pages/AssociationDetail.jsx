@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import AssociationPosts from '../components/AssociationPosts';
 import AssociationMeetings from '../components/AssociationMeetings';
+import AssociationEvents from '../components/AssociationEvents';
 import ContactLinks from '../components/ContactLinks';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -214,6 +215,9 @@ const AssociationDetail = () => {
           {/* MEETINGS and ANNOUNCEMENTS: for members and leaders */}
           {(isMember || data.can_manage) && (
             <AssociationMeetings associationId={data.id} associationName={data.name} canManage={data.can_manage} />
+          )}
+          {(isMember || data.can_manage) && (
+            <AssociationEvents associationId={data.id} canManage={data.can_manage} />
           )}
           {(isMember || data.can_manage) && (
             <AssociationPosts associationId={data.id} canManage={data.can_manage} members={data.members} />

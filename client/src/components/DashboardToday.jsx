@@ -9,6 +9,7 @@ const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 const where = (item) => {
   if (item.type === 'lesson') return [item.place, item.subgroup ? `${item.subgroup} п/г` : ''].filter(Boolean).join(' · ');
   if (item.type === 'meeting') return [item.association?.name, item.place].filter(Boolean).join(' · ');
+  if (item.type === 'event') return [TYPES.event.one, item.place].filter(Boolean).join(' · ');
   if (item.type === 'task') return item.association ? item.association.name : 'Личная задача';
   return TYPES.homework.one;
 };
@@ -30,6 +31,7 @@ export const TodayCard = ({ items, status }) => {
 
   const open = (item) => {
     if (item.type === 'task') navigate(`/tasks/${item.ref_id}`);
+    else if (item.type === 'event') navigate(`/events/${item.ref_id}`);
     else navigate(`/calendar?day=${shownKey}`);
   };
 

@@ -653,8 +653,8 @@ class SdoCourseItem(BaseModel):
 
 
 class CalendarItem(BaseModel):
-    """One entry: a lesson, a meeting, a task deadline or a homework deadline."""
-    type: Literal["lesson", "meeting", "task", "homework"]
+    """One entry: a lesson, a meeting, an event, a task deadline or a homework deadline."""
+    type: Literal["lesson", "meeting", "task", "homework", "event"]
     id: str
     title: str
     starts_at: UtcDateTime
@@ -683,3 +683,164 @@ class CalendarOut(BaseModel):
     # ok | stale (EIOS is down, the last saved copy) | unavailable | no_group
     lessons: Literal["ok", "stale", "unavailable", "no_group"]
     items: List[CalendarItem]
+
+
+# --- Events ---
+EventRole = Literal["participant", "volunteer"]
+
+
+class EventIn(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str = Field("", max_length=10000)
+    scope: Literal["association", "institute"] = "association"
+    # The organizer; required for association events, optional for institute ones
+    association_id: Optional[int] = None
+    starts_at: datetime
+    ends_at: datetime
+    place: str = Field("", max_length=200)
+    participant_limit: Optional[int] = Field(None, ge=1, le=10000)
+    volunteer_limit: Optional[int] = Field(None, ge=1, le=1000)
+    registration_open: bool = True
+
+    @field_validator("title")
+    @classmethod
+    def clean_title(cls, v: str) -> str:
+        return _clean_title(v)
+
+    @field_validator("place")
+    @classmethod
+    def clean_place(cls, v: str) -> str:
+        return " ".join(v.split())
+
+    @field_validator("starts_at", "ends_at")
+    @classmethod
+    def aware(cls, v: datetime) -> datetime:
+        return _utc_or_none(v)
+
+    @model_validator(mode="after")
+    def check(self):
+        if self.ends_at <= self.starts_at:
+            raise ValueError("Мероприятие должно заканчиваться позже, чем начинается")
+        if self.ends_at - self.starts_at > timedelta(days=31):
+            raise ValueError("Мероприятие не может длиться дольше месяца")
+        if self.scope == "association" and not self.association_id:
+            raise ValueError("Выберите объединение")
+        return self
+
+
+class RegisterIn(BaseModel):
+    role: EventRole = "participant"
+
+
+class AddPeopleIn(BaseModel):
+    user_ids: List[int] = Field(..., min_length=1, max_length=500)
+    role: EventRole = "participant"
+
+
+class AddGroupsIn(BaseModel):
+    groups: List[str] = Field(..., min_length=1, max_length=20)
+    role: EventRole = "participant"
+
+
+class FeedbackIn(BaseModel):
+    rating: int = Field(..., ge=1, le=5)
+    text: str = Field("", max_length=2000)
+
+    @field_validator("text")
+    @classmethod
+    def clean_text(cls, v: str) -> str:
+        return v.strip()
+
+
+class EventCard(BaseModel):
+    id: int
+    title: str
+    scope: str
+    association: Optional[AssociationRef] = None
+    starts_at: UtcDateTime
+    ends_at: UtcDateTime
+    place: str = ""
+    participant_limit: Optional[int] = None
+    volunteer_limit: Optional[int] = None
+    participants: int = 0
+    volunteers: int = 0
+    registration_open: bool = True
+    my_role: Optional[EventRole] = None
+    can_manage: bool = False
+
+
+class RegistrationItem(BaseModel):
+    user_id: int
+    full_name: str
+    group_number: Optional[str] = None
+    role: EventRole
+    source: str
+    attended: Optional[bool] = None
+    vk_url: Optional[str] = None
+    max_contact: Optional[str] = None
+
+
+class FeedbackSummary(BaseModel):
+    count: int = 0
+    average: Optional[float] = None
+    # Anonymous: ratings and comments only
+    comments: List[Dict] = []
+
+
+class EventDetail(EventCard):
+    description: str = ""
+    created_by: Optional[str] = None
+    my_attended: Optional[bool] = None
+    my_feedback: Optional[Dict] = None
+    can_feedback: bool = False
+    # Documents: for those registered and the organizers
+    attachments: List[AttachmentItem] = []
+    registrations: List[RegistrationItem] = []
+    feedback: Optional[FeedbackSummary] = None
+
+
+# --- Manual achievements and the ПГАС summary ---
+class AchievementIn(BaseModel):
+    title: str = Field(..., min_length=1, max_length=300)
+    organizer: str = Field("", max_length=300)
+    day: date
+    role: str = Field("", max_length=100)
+    description: str = Field("", max_length=5000)
+
+    @field_validator("title")
+    @classmethod
+    def clean_title(cls, v: str) -> str:
+        return _clean_title(v)
+
+    @field_validator("organizer", "role")
+    @classmethod
+    def clean_line(cls, v: str) -> str:
+        return " ".join(v.split())
+
+
+class AchievementItem(BaseModel):
+    id: int
+    title: str
+    organizer: str = ""
+    day: date
+    role: str = ""
+    description: str = ""
+    attachments: List[AttachmentItem] = []
+
+
+class PortfolioRow(BaseModel):
+    """One line of the ПГАС summary: an event on the portal or one added by hand."""
+    kind: Literal["event", "manual"]
+    id: int
+    day: date
+    title: str
+    organizer: str
+    level: str
+    role: str
+    documents: List[AttachmentItem] = []
+
+
+class PortfolioOut(BaseModel):
+    start: date
+    end: date
+    rows: List[PortfolioRow]

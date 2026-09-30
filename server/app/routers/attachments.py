@@ -1,4 +1,4 @@
-"""Files and links on tasks and association announcements.
+"""Files and links on tasks, association announcements, events and manual achievements.
 
 A file is uploaded as the raw request body (its name in ?name=) and is downloaded only through
 GET /attachments/{id}, after the same rights check as its task or announcement: orders and
@@ -16,14 +16,23 @@ from app.db.database import get_db
 import app.models as models
 import app.schemas as schemas
 import app.core.security as security
-from app.routers import posts, tasks
+from app.routers import achievements, events, posts, tasks
 from app.services import uploads
 
 router = APIRouter(prefix="/api/v1", tags=["Attachments"])
 
 
 def _owner_rights(db: Session, a: models.Attachment, user: models.User) -> Tuple[bool, bool]:
-    """(can see, can manage) for the attachment's task or announcement."""
+    """(can see, can manage) for the attachment's task, announcement, event or achievement."""
+    if a.event_id:
+        event = events.get_visible(db, a.event_id, user)
+        manage = events.can_manage(db, event, user)
+        if not (manage or any(r.user_id == user.id for r in event.registrations)):
+            raise HTTPException(status_code=404, detail="Файл не найден")
+        return True, manage
+    if a.achievement_id:
+        achievements.get_own(db, a.achievement_id, user)  # 404 for anyone else
+        return True, True
     if a.task_id:
         task = tasks.get_visible(db, a.task_id, user)  # 404 if hidden
         return True, tasks.can_manage(db, task, user)
@@ -119,6 +128,45 @@ def add_post_link(
 ):
     _managed_post(db, post_id, user)
     return _item(_add_link(req, user, db, post_id=post_id), user)
+
+
+# --- Events: organizers attach orders, exemptions and thank-you letters ---------------------------
+
+@router.post("/events/{event_id}/files", response_model=schemas.AttachmentItem, status_code=201)
+async def upload_event_file(
+    event_id: int,
+    request: Request,
+    name: str = Query(..., min_length=1, max_length=200),
+    user: models.User = Depends(security.require_current_user),
+    db: Session = Depends(get_db),
+):
+    events.get_managed(db, event_id, user)
+    return _item(await _store_file(request, name, user, db, event_id=event_id), user)
+
+
+@router.post("/events/{event_id}/links", response_model=schemas.AttachmentItem, status_code=201)
+def add_event_link(
+    event_id: int,
+    req: schemas.LinkIn,
+    user: models.User = Depends(security.require_current_user),
+    db: Session = Depends(get_db),
+):
+    events.get_managed(db, event_id, user)
+    return _item(_add_link(req, user, db, event_id=event_id), user)
+
+
+# --- Manual achievements: the student's own scan -------------------------------------------------
+
+@router.post("/achievements/{achievement_id}/files", response_model=schemas.AttachmentItem, status_code=201)
+async def upload_achievement_file(
+    achievement_id: int,
+    request: Request,
+    name: str = Query(..., min_length=1, max_length=200),
+    user: models.User = Depends(security.require_current_user),
+    db: Session = Depends(get_db),
+):
+    achievements.get_own(db, achievement_id, user)
+    return _item(await _store_file(request, name, user, db, achievement_id=achievement_id), user)
 
 
 # --- Download and delete -------------------------------------------------------------------------

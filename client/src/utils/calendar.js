@@ -38,6 +38,7 @@ export const rangeTitle = (from, to) => {
 export const TYPES = {
   lesson: { label: 'Пары', one: 'Пара', hue: 'blue' },
   meeting: { label: 'Собрания', one: 'Собрание', hue: 'olive' },
+  event: { label: 'Мероприятия', one: 'Мероприятие', hue: 'red' },
   task: { label: 'Задачи', one: 'Задача', hue: 'teal' },
   homework: { label: 'ДЗ группы', one: 'ДЗ группы', hue: 'violet' },
 };

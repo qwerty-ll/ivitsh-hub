@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, UniqueConstraint, false, true
+from sqlalchemy import Column, Integer, String, Text, Boolean, Date, DateTime, ForeignKey, UniqueConstraint, false, true
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 
@@ -278,12 +278,15 @@ class AssociationPostRecipient(Base):
 
 
 class Attachment(Base):
-    """A file (stored on disk in UPLOAD_DIR, never in the DB or git) or a link, on a task or a post."""
+    """A file (stored on disk in UPLOAD_DIR, never in the DB or git) or a link, on a task, a post,
+    an event (orders, thanks) or a manual achievement (a scan)."""
     __tablename__ = "attachments"
 
     id = Column(Integer, primary_key=True, index=True)
     task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True)
     post_id = Column(Integer, ForeignKey("association_posts.id", ondelete="CASCADE"), nullable=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id", ondelete="CASCADE"), nullable=True, index=True)
+    achievement_id = Column(Integer, ForeignKey("manual_achievements.id", ondelete="CASCADE"), nullable=True, index=True)
     kind = Column(String, nullable=False)  # "file" | "link"
     # The original file name, or the link's caption
     title = Column(String, nullable=False)
@@ -296,6 +299,8 @@ class Attachment(Base):
 
     task = relationship("Task", back_populates="attachments")
     post = relationship("AssociationPost", back_populates="attachments")
+    event = relationship("Event", back_populates="attachments")
+    achievement = relationship("ManualAchievement", back_populates="attachments")
     uploaded_by = relationship("User")
 
 
@@ -358,3 +363,85 @@ class GroupHomework(Base):
     updated_at = Column(DateTime(timezone=True), nullable=True)
 
     created_by = relationship("User")
+
+
+class Event(Base):
+    """An event: of an association (its members see it) or of the institute (everyone; set by administrators)."""
+    __tablename__ = "events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # "association" | "institute"
+    scope = Column(String, nullable=False, default="association", server_default="association")
+    # The organizing association; for institute events optional (null = the administration)
+    association_id = Column(Integer, ForeignKey("associations.id", ondelete="CASCADE"), nullable=True, index=True)
+    created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=False, default="", server_default="")
+    starts_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    ends_at = Column(DateTime(timezone=True), nullable=False)
+    place = Column(String, nullable=False, default="", server_default="")
+    # None = no limit
+    participant_limit = Column(Integer, nullable=True)
+    # None = volunteers are not needed
+    volunteer_limit = Column(Integer, nullable=True)
+    registration_open = Column(Boolean, nullable=False, default=True, server_default=true())
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    association = relationship("Association")
+    created_by = relationship("User")
+    registrations = relationship("EventRegistration", back_populates="event", cascade="all, delete-orphan")
+    feedback = relationship("EventFeedback", cascade="all, delete-orphan")
+    attachments = relationship("Attachment", back_populates="event", cascade="all, delete-orphan",
+                               order_by="Attachment.created_at")
+
+
+class EventRegistration(Base):
+    __tablename__ = "event_registrations"
+    __table_args__ = (UniqueConstraint("event_id", "user_id", name="uq_event_registration"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String, nullable=False, default="participant", server_default="participant")  # participant | volunteer
+    # self | leader | admin | admin_group
+    source = Column(String, nullable=False, default="self", server_default="self")
+    # Marked by the organizers after the start: True came, False did not, None not marked
+    attended = Column(Boolean, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    event = relationship("Event", back_populates="registrations")
+    user = relationship("User")
+
+
+class EventFeedback(Base):
+    """The short survey after an event: a 1–5 rating and a comment, one per student."""
+    __tablename__ = "event_feedback"
+    __table_args__ = (UniqueConstraint("event_id", "user_id", name="uq_event_feedback"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    rating = Column(Integer, nullable=False)
+    text = Column(Text, nullable=False, default="", server_default="")
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    user = relationship("User")
+
+
+class ManualAchievement(Base):
+    """An event the student took part in outside the portal, for the ПГАС summary; a scan can be attached."""
+    __tablename__ = "manual_achievements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    organizer = Column(String, nullable=False, default="", server_default="")
+    day = Column(Date, nullable=False)
+    # "Участник", "Волонтёр", "Призёр (2 место)"...
+    role = Column(String, nullable=False, default="", server_default="")
+    description = Column(Text, nullable=False, default="", server_default="")
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+
+    attachments = relationship("Attachment", back_populates="achievement", cascade="all, delete-orphan",
+                               order_by="Attachment.created_at")

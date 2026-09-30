@@ -1,0 +1,135 @@
+/* Events (/events, /events/:id) and the ПГАС summary. Tokens only. */
+
+.events-tabs { margin-bottom: var(--space-5); flex-wrap: wrap; }
+
+.event-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  gap: var(--space-4);
+  list-style: none;
+}
+.event-grid-compact { grid-template-columns: minmax(0, 1fr); }
+.event-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+  padding: var(--space-4);
+  border-top: 4px solid var(--hue-red-edge);
+  color: var(--text);
+  text-decoration: none;
+  transition: box-shadow var(--dur-fast) var(--ease);
+}
+.event-card.is-institute { border-top-color: var(--hue-red); }
+.event-card:hover { box-shadow: var(--shadow-overlay); }
+.event-card:hover .event-card-title { color: var(--accent); }
+.event-card-top { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.event-card-top .badge { display: inline-flex; align-items: center; gap: var(--space-1); }
+.event-card-title { font-size: var(--text-md); font-weight: var(--weight-semibold); line-height: 1.3; overflow-wrap: anywhere; }
+.event-card-meta { display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-sm); color: var(--text-2); }
+.event-card-meta span,
+.event-card-seats span { display: inline-flex; align-items: center; gap: var(--space-1); }
+.event-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+.event-card-org { color: var(--text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-card-seats { display: inline-flex; gap: var(--space-3); color: var(--text-2); }
+
+.event-survey {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  background: var(--hue-red-tint);
+  border-color: var(--hue-red-edge);
+}
+.event-survey > svg { color: var(--hue-red); flex-shrink: 0; margin-top: var(--space-1); }
+.event-survey h2 { font-size: var(--text-md); margin-bottom: var(--space-1); }
+.event-survey ul { margin-top: var(--space-2); padding-left: var(--space-5); }
+
+/* ---------- One event ---------- */
+.event-hero {
+  margin-bottom: var(--space-6);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--tile-tint);
+  border: 1px solid var(--tile-edge);
+}
+.event-hero h1 { margin: var(--space-3) 0 var(--space-4); overflow-wrap: anywhere; }
+.event-hero .cal-facts svg { color: var(--tile); }
+.event-seats { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-3); color: var(--text-2); }
+.event-seats span { display: inline-flex; align-items: center; gap: var(--space-2); }
+.event-status { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); font-weight: var(--weight-medium); color: var(--success); }
+.event-stars { display: flex; gap: var(--space-1); border: 0; padding: 0; }
+.event-star { cursor: pointer; color: var(--border-strong); padding: var(--space-1); border-radius: var(--radius-sm); }
+.event-star.is-on { color: var(--warning); }
+.event-star.is-on svg { fill: currentColor; }
+.event-star:focus-within { outline: 2px solid var(--accent); }
+
+.event-regs > li + li { border-top: 1px solid var(--border); }
+.event-reg {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-2) 0;
+}
+.event-reg > .task-person,
+.event-reg > .event-reg-name { grid-column: 1; font-weight: var(--weight-medium); }
+.event-reg > .assoc-person-meta,
+.event-reg > .contact-links { grid-column: 1; }
+.event-reg > button { grid-column: 2; grid-row: 1; }
+.event-add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.event-add-head { display: flex; justify-content: space-between; gap: var(--space-2); }
+.event-add .btn { align-self: flex-start; }
+.event-groups { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.event-groups-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.event-groups-row .input { flex: 1; min-width: 12rem; }
+.event-feedback-summary { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border); }
+.event-feedback-summary ul { display: flex; flex-direction: column; gap: var(--space-2); padding-left: 0; list-style: none; font-size: var(--text-sm); }
+.event-feedback-summary .tabular { color: var(--warning); }
+.event-when { grid-template-columns: 1fr 1fr; }
+.event-check { min-height: auto; margin: var(--space-6) 0 var(--space-2); }
+
+@media (max-width: 1023px) {
+  /* The registration box first on narrow screens */
+  .event-page .assoc-aside { order: -1; }
+}
+
+/* ---------- ПГАС ---------- */
+.pgas { display: flex; flex-direction: column; gap: var(--space-4); align-items: flex-start; }
+.pgas > * { width: 100%; }
+.pgas > .btn { width: auto; }
+.pgas-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: var(--space-4); }
+.pgas-head h2 { font-size: var(--text-lg); }
+.pgas-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.pgas-controls .select { width: auto; }
+.pgas-controls .btn { display: inline-flex; align-items: center; gap: var(--space-2); }
+.pgas-list { display: flex; flex-direction: column; gap: var(--space-3); list-style: none; padding: 0; }
+.pgas-row { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); }
+.pgas-row-main { display: flex; flex-direction: column; gap: var(--space-1); }
+.pgas-date { font-size: var(--text-sm); color: var(--text-2); }
+.pgas-title { font-weight: var(--weight-semibold); font-size: var(--text-md); overflow-wrap: anywhere; }
+.pgas-row-actions { display: flex; gap: var(--space-2); }
+
+@media (max-width: 640px) {
+  .event-hero { padding: var(--space-4); }
+  .event-when { grid-template-columns: 1fr; }
+  .event-check { margin-top: 0; }
+}

@@ -8,7 +8,7 @@ import ScheduleWidget from '../components/ScheduleWidget';
 import { TodayCard, MyTasksCard } from '../components/DashboardToday';
 import SectionIcon from '../components/SectionIcon';
 import { SECTIONS } from '../data/sections';
-import { calendarApi, contentApi, tasksApi } from '../services/api';
+import { calendarApi, contentApi, eventsApi, tasksApi } from '../services/api';
 import { openChat } from '../utils/chat';
 import { markStep, readSteps, ONBOARDING_EVENT } from '../utils/onboarding';
 import { subgroupOf, cleanLessonTitle } from '../utils/lessons';
@@ -16,8 +16,8 @@ import { dayKey, fitsSubgroup, readSubgroup, timeLabel } from '../utils/calendar
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 
-// The tab bar already has schedule, tasks and associations; these are the other sections
-const SHORTCUTS = ['forum', 'map', 'teachers', 'faq'];
+// The tab bar already has the calendar, tasks and associations; these are the other main sections (FAQ is in the menu)
+const SHORTCUTS = ['events', 'forum', 'map', 'teachers'];
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const localIso = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -178,6 +178,7 @@ const Dashboard = () => {
 
   // --- Signed in: the coming week from the calendar (lessons, meetings, deadlines) and open tasks ---
   const [calendar, setCalendar] = useState(null);
+  const [toRate, setToRate] = useState([]);
   const [myCards, setMyCards] = useState(null);
   useEffect(() => {
     if (!isLoggedIn) { setCalendar(null); setMyCards(null); return; }
@@ -185,6 +186,7 @@ const Dashboard = () => {
       .then(setCalendar)
       .catch(() => setCalendar({ items: [], lessons: 'unavailable' }));
     tasksApi.my().then(res => setMyCards(res || [])).catch(() => setMyCards([]));
+    eventsApi.pendingFeedback().then(res => setToRate(res || [])).catch(() => setToRate([]));
   }, [isLoggedIn]);
   const subgroup = readSubgroup();
   const calendarItems = (calendar?.items || []).filter(i => fitsSubgroup(i, subgroup));
@@ -365,6 +367,23 @@ const Dashboard = () => {
 
         <div className="dash-aside">
           {isLoggedIn && <MyTasksCard cards={myCards} />}
+
+          {/* The survey after an event the student took part in */}
+          {toRate.length > 0 && (
+            <section className="card dash-card hue-red dash-rate" aria-labelledby="rate-title">
+              <div className="dash-card-head"><h2 id="rate-title">Оцените мероприятие</h2></div>
+              <ul className="list dash-rows">
+                {toRate.slice(0, 3).map(e => (
+                  <li key={e.id}>
+                    <Link to={`/events/${e.id}#feedback`} className="dash-row-btn">
+                      <span className="dash-row-label">{e.title}</span>
+                      <ChevronRight size={16} className="dash-row-arrow" {...ICON} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {/* ANNOUNCEMENTS: hidden until there are any */}
           {announcements.length > 0 && (

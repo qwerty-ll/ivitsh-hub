@@ -9,10 +9,11 @@ const ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx,.pptx,.zip';
 
 /**
  * Files and links of a task or an announcement.
- * owner: 'tasks' | 'associations/posts'; canAdd shows the upload and link controls;
+ * owner: 'tasks' | 'associations/posts' | 'events' | 'achievements'; canAdd shows the upload controls
+ * (and adding links unless links={false});
  * onChange reloads the owner after an addition or removal.
  */
-const Attachments = ({ owner, ownerId, items, canAdd, onChange }) => {
+const Attachments = ({ owner, ownerId, items, canAdd, onChange, links = true, hint = '' }) => {
   const toast = useToast();
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -96,11 +97,13 @@ const Attachments = ({ owner, ownerId, items, canAdd, onChange }) => {
               {uploading ? <Loader2 size={16} className="spin-icon" {...ICON} /> : <Paperclip size={16} {...ICON} />}
               {uploading ? 'Загружаем…' : 'Прикрепить файл'}
             </button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setLinkOpen(v => !v)} aria-expanded={linkOpen}>
-              <Link2 size={16} {...ICON} />Добавить ссылку
-            </button>
+            {links && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setLinkOpen(v => !v)} aria-expanded={linkOpen}>
+                <Link2 size={16} {...ICON} />Добавить ссылку
+              </button>
+            )}
           </div>
-          <p className="attach-hint">PDF, изображения, Word, Excel, PowerPoint или ZIP, до 10 МБ.</p>
+          <p className="attach-hint">{hint || 'PDF, изображения, Word, Excel, PowerPoint или ZIP, до 10 МБ.'}</p>
           {linkOpen && (
             <form className="attach-link-form" onSubmit={addLink}>
               <input className="input" type="url" required placeholder="https://…" value={link.url} aria-label="Адрес ссылки"
