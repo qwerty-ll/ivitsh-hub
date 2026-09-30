@@ -269,7 +269,7 @@ def _search(query: str, db: Session) -> List[assistant.Finding]:
     rooms = assistant.room_facts_finding(f"где есть {query}", None)
     if rooms:
         found.insert(0, rooms)
-    knowledge = assistant._knowledge_finding(query)
+    knowledge = assistant._knowledge_finding(query, db)
     if knowledge:
         found.append(knowledge)
     return sorted(found, key=lambda f: -f.weight)[:3]

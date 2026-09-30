@@ -1,6 +1,47 @@
+import re
 from datetime import date, datetime
 from typing import Any, Dict, Optional, List, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+# --- Contacts a student shares with association leaders ---
+# Accepted as a link or a bare name; stored as the bare name ("ivan_petrov", "id12345").
+_TG_PREFIX = re.compile(r"^(?:https?://)?(?:www\.)?(?:t\.me|telegram\.me)/|^@", re.IGNORECASE)
+_TG_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{3,31}$")
+_VK_PREFIX = re.compile(r"^(?:https?://)?(?:m\.|www\.)?vk\.(?:com|ru)/|^@", re.IGNORECASE)
+_VK_NAME = re.compile(r"^[A-Za-z0-9_.]{2,50}$")
+_UNSAFE_TEXT = re.compile(r"[<>\x00-\x1f]")
+
+
+def normalize_tg(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    value = _TG_PREFIX.sub("", value.strip()).strip("/")
+    if not value:
+        return ""
+    if not _TG_NAME.match(value):
+        raise ValueError("Telegram: укажите имя пользователя, например @ivan_petrov")
+    return value
+
+
+def normalize_vk(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    value = _VK_PREFIX.sub("", value.strip()).strip("/")
+    if not value:
+        return ""
+    if not _VK_NAME.match(value):
+        raise ValueError("ВКонтакте: укажите ссылку на страницу, например vk.com/id12345")
+    return value
+
+
+def normalize_max(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    value = value.strip()
+    if _UNSAFE_TEXT.search(value):
+        raise ValueError("Max: недопустимые символы")
+    return value
 
 # --- User & Auth Schemas ---
 class UserLogin(BaseModel):
@@ -16,6 +57,25 @@ class EiosLoginRequest(BaseModel):
 
 class UserUpdateProfile(BaseModel):
     group_number: Optional[str] = Field(None, max_length=50)
+    # None leaves a contact as is, "" clears it
+    tg_username: Optional[str] = Field(None, max_length=100)
+    vk_url: Optional[str] = Field(None, max_length=100)
+    max_contact: Optional[str] = Field(None, max_length=64)
+
+    @field_validator("tg_username")
+    @classmethod
+    def clean_tg(cls, v: Optional[str]) -> Optional[str]:
+        return normalize_tg(v)
+
+    @field_validator("vk_url")
+    @classmethod
+    def clean_vk(cls, v: Optional[str]) -> Optional[str]:
+        return normalize_vk(v)
+
+    @field_validator("max_contact")
+    @classmethod
+    def clean_max(cls, v: Optional[str]) -> Optional[str]:
+        return normalize_max(v)
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -30,6 +90,9 @@ class UserResponse(BaseModel):
     userpictureurl: Optional[str] = None
     auth_source: str = "eios"
     is_blocked: bool = False
+    tg_username: Optional[str] = None
+    vk_url: Optional[str] = None
+    max_contact: Optional[str] = None
     created_at: datetime
 
 class LoginResponse(BaseModel):
@@ -208,3 +271,107 @@ class RetakeIn(DocumentPerson):
     control: Literal["экзамен", "зачёт", "дифференцированный зачёт"]
     teacher: str = Field("", max_length=100)
     reason: str = Field(..., min_length=3, max_length=300)
+
+
+# --- Associations ---
+class PersonContacts(BaseModel):
+    """A person as shown in association pages; contacts are empty for viewers not allowed to see them."""
+    user_id: int
+    full_name: str
+    group_number: Optional[str] = None
+    tg_username: Optional[str] = None
+    vk_url: Optional[str] = None
+    max_contact: Optional[str] = None
+
+
+class MemberItem(PersonContacts):
+    role: Literal["member", "leader"]
+    status: Literal["pending", "approved", "rejected", "left"]
+    message: Optional[str] = None
+    created_at: Optional[datetime] = None
+    decided_at: Optional[datetime] = None
+
+
+class AssociationItem(BaseModel):
+    id: int
+    name: str
+    description: str = ""
+    contacts: Optional[str] = None
+    leaders: List[PersonContacts] = []
+    listed_leader: Optional[str] = None
+    member_count: int = 0
+    # The viewer's own place in it (None for guests and non-members)
+    my_role: Optional[str] = None
+    my_status: Optional[str] = None
+
+
+class AssociationDetail(AssociationItem):
+    can_manage: bool = False
+    # Filled only for its leaders and administrators
+    members: List[MemberItem] = []
+    applications: List[MemberItem] = []
+
+
+class AssociationApply(BaseModel):
+    message: Optional[str] = Field(None, max_length=300)
+
+    @field_validator("message")
+    @classmethod
+    def clean_message(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        v = v.strip()
+        if _UNSAFE_TEXT.search(v.replace("\n", " ")):
+            raise ValueError("Недопустимые символы в сообщении")
+        return v or None
+
+
+class MembershipDecision(BaseModel):
+    approve: bool
+
+
+class AssociationLeaderEdit(BaseModel):
+    description: str = Field("", max_length=3000)
+    contacts: Optional[str] = Field(None, max_length=200)
+
+
+class AssociationAdminIn(AssociationLeaderEdit):
+    name: str = Field(..., min_length=2, max_length=100)
+    leader_hint: Optional[str] = Field(None, max_length=200)
+    is_active: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: str) -> str:
+        v = " ".join(v.split())
+        if len(v) < 2:
+            raise ValueError("Название слишком короткое")
+        return v
+
+
+class UserBrief(BaseModel):
+    id: int
+    full_name: str
+    group_number: Optional[str] = None
+
+
+class AssociationAdminItem(BaseModel):
+    id: int
+    name: str
+    description: str = ""
+    contacts: Optional[str] = None
+    leader_hint: Optional[str] = None
+    is_active: bool = True
+    leaders: List[UserBrief] = []
+    member_count: int = 0
+    pending_count: int = 0
+    # Signed-in users whose name matches leader_hint, for a one-click assignment
+    hint_matches: List[UserBrief] = []
+
+
+class MyMembership(BaseModel):
+    association_id: int
+    association_name: str
+    role: str
+    status: str
+    created_at: Optional[datetime] = None

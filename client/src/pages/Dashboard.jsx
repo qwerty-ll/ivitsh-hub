@@ -14,7 +14,7 @@ import { subgroupOf, cleanLessonTitle } from '../utils/lessons';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 
-const SHORTCUTS = ['forum', 'map', 'teachers', 'faq'];
+const SHORTCUTS = ['associations', 'map', 'teachers', 'faq'];
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const localIso = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;

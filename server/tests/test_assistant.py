@@ -246,12 +246,21 @@ def test_questions_about_the_portal_get_its_sections(client, fake_timetable):
     assert "с 9:00 до 17:00" in ask(client, "часы работы деканата")[0]
 
 
-def test_who_is_the_director(client, fake_timetable):
+def test_who_is_the_director(client, fake_timetable, db):
     for question in ("как зовут директора ивитш?", "кто руководит ИВИТШ", "где кабинет директора"):
         reply, _ = ask(client, question)
         assert reply.startswith("Директор Высшей ИТ-школы (ИВИТШ) КГУ — Борисов Александр Сергеевич."), question
-    # Club leaders are still the clubs' answer
-    assert ask(client, "кто руководит спортивным программированием")[0].startswith("ВИТШ-медиа")
+    # Club leaders are the clubs' answer, taken from the associations catalog
+    db.add_all([
+        models.Association(name="Спортивное программирование", leader_hint="Лебедев Глеб"),
+        models.Association(name="Е-спорт", leader_hint="Ли Михаил"),
+    ])
+    db.commit()
+    reply, actions = ask(client, "кто руководит спортивным программированием")
+    assert reply.startswith("«Спортивное программирование»: руководитель — Лебедев Глеб.")
+    assert actions[0][0] == "Спортивное программирование" and actions[0][1].startswith("/associations/")
+    reply, actions = ask(client, "какие есть клубы?")
+    assert "Е-спорт (рук. Ли Михаил)" in reply and ("Объединения", "/associations") in actions
     assert ask(client, "где поесть рядом")[0].startswith("Рядом с Корпусом Б можно покушать")
 
 

@@ -938,6 +938,7 @@ def _forum_findings(q: str, db: Session) -> List[Finding]:
 # A question about the portal itself gets a button to the section it names
 _SECTION_LINKS = [
     (r"форум", Action("Форум", "/forum")),
+    (r"объединени|клуб", Action("Объединения", "/associations")),
     (r"карт[аеуы]|кампус", Action("Карта кампуса", "/map")),
     (r"преподавател", Action("Преподаватели", "/teachers")),
     (r"частые|faq|вопросы и ответы", Action("Частые вопросы", "/faq")),
@@ -945,10 +946,57 @@ _SECTION_LINKS = [
 ]
 
 
-def _knowledge_finding(q: str) -> Optional[Finding]:
+def _fold(text: str) -> str:
+    return text.lower().replace("ё", "е")
+
+
+def _name_stems(name: str) -> List[str]:
+    """ "Спортивное программирование" -> ["спорт", "прогр"]: word starts that survive Russian endings."""
+    return [w[:5] for w in re.findall(r"[a-zа-я0-9]+", _fold(name)) if len(w) >= 4]
+
+
+def _associations_finding(q: str, db: Session, score: int) -> Optional[Finding]:
+    """Clubs from the catalog: the one the question names, else the whole list."""
+    associations = (
+        db.query(models.Association)
+        .options(selectinload(models.Association.memberships).selectinload(models.Membership.user))
+        .filter(models.Association.is_active.is_(True))
+        .all()
+    )
+    if not associations:
+        return None
+    associations.sort(key=lambda a: (not re.match(r"[а-яё]", a.name.lower()), _fold(a.name)))
+
+    def leader_of(a: models.Association) -> Optional[str]:
+        leaders = [m.user.full_name for m in a.memberships if m.role == "leader" and m.status == "approved"]
+        names = [" ".join(n.split()[:2]) for n in sorted(leaders)] or ([a.leader_hint] if a.leader_hint else [])
+        return ", ".join(names) or None
+
+    folded = _fold(q)
+    named = []
+    for a in associations:
+        stems = _name_stems(a.name)
+        if stems and all(stem in folded for stem in stems):
+            named.append((sum(len(s) for s in stems), a))
+    if named:
+        a = max(named, key=lambda pair: pair[0])[1]
+        leader = leader_of(a)
+        text = f"«{a.name}»: " + (f"руководитель — {leader}." if leader else "руководитель пока не указан.")
+        text += " Описание, контакты руководителя и заявка на вступление — на странице объединения."
+        return Finding(text, [Action(a.name, f"/associations/{a.id}")], exact=True, weight=score + 2)
+
+    listed = "; ".join(f"{a.name} (рук. {leader_of(a)})" if leader_of(a) else a.name for a in associations)
+    text = f"Студенческие объединения ИВИТШ: {listed}. Подать заявку и написать руководителю можно в разделе «Объединения»."
+    return Finding(text, [Action("Объединения", "/associations")], weight=score)
+
+
+def _knowledge_finding(q: str, db: Optional[Session] = None) -> Optional[Finding]:
     score, chunk = rag_service.evaluate_query(q)
     if score < 4 or not chunk:
         return None
+    if chunk is rag_service.ASSOCIATIONS:
+        from_catalog = _associations_finding(q, db, score) if db is not None else None
+        return from_catalog or Finding(chunk["content"], [Action("Объединения", "/associations")], weight=score)
     actions = [action for pattern, action in _SECTION_LINKS if re.search(pattern, q)] if chunk is rag_service.PORTAL_GUIDE else []
     return Finding(chunk["content"], actions, weight=score)
 
@@ -1160,7 +1208,7 @@ async def answer(
         return "\n\n".join(f.text for f in shown), _merge_actions(shown), None
 
     found = _faq_findings(q, db) + _forum_findings(q, db)
-    knowledge = _knowledge_finding(q)
+    knowledge = _knowledge_finding(q, db)
     if knowledge:
         found.append(knowledge)
     found.sort(key=lambda f: -f.weight)

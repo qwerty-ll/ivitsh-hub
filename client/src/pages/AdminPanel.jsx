@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DOMPurify from 'dompurify';
-import { Pencil, Trash2, Save, RefreshCw, Lock, LockOpen, CircleAlert } from 'lucide-react';
+import { Trash2, Save, Lock, LockOpen } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { adminApi } from '../services/api';
 import SectionIcon from '../components/SectionIcon';
+import { Field, Toolbar, RefreshButton, ListSkeleton, LoadError, RowActions } from '../components/admin/AdminUi';
+import AdminAssociations from '../components/admin/AdminAssociations';
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true };
 
@@ -26,76 +28,13 @@ const focusEditor = (fieldId) => {
   });
 };
 
-const Field = ({ id, label, required, hint, className = '', children }) => (
-  <div className={`field ${className}`.trim()}>
-    <label className="field-label" htmlFor={id}>
-      {label}
-      {required && <span className="admin-required" aria-hidden="true"> *</span>}
-    </label>
-    {children}
-    {hint && <p className="field-hint" id={`${id}-hint`}>{hint}</p>}
-  </div>
-);
-
-const Toolbar = ({ id, title, description, children }) => (
-  <div className="admin-toolbar">
-    <div className="admin-toolbar-text">
-      <h2 id={id}>{title}</h2>
-      {description && <p>{description}</p>}
-    </div>
-    {children && <div className="admin-toolbar-actions">{children}</div>}
-  </div>
-);
-
-const RefreshButton = ({ onClick, disabled }) => (
-  <button type="button" className="btn btn-secondary btn-sm" onClick={onClick} disabled={disabled}>
-    <RefreshCw {...ICON} /> Обновить список
-  </button>
-);
-
-const ListSkeleton = () => (
-  <div className="admin-skeleton" role="status">
-    <span className="visually-hidden">Загрузка списка</span>
-    {[0, 1, 2].map(i => (
-      <div key={i} className="admin-skeleton-row" aria-hidden="true">
-        <span className="skeleton admin-skeleton-line" />
-        <span className="skeleton admin-skeleton-line admin-skeleton-line-short" />
-      </div>
-    ))}
-  </div>
-);
-
-const LoadError = ({ message, onRetry }) => (
-  <div className="admin-error" role="alert">
-    <CircleAlert {...ICON} />
-    <p>Ошибка загрузки: {message}</p>
-    <button type="button" className="btn btn-secondary btn-sm" onClick={onRetry}>
-      <RefreshCw {...ICON} /> Повторить загрузку
-    </button>
-  </div>
-);
-
-const RowActions = ({ label, onEdit, onDelete, deleteLabel = 'Удалить' }) => (
-  <div className="admin-actions">
-    {onEdit && (
-      <button type="button" className="btn btn-ghost btn-icon btn-sm" onClick={onEdit}
-        title="Редактировать" aria-label={`Редактировать: ${label}`}>
-        <Pencil {...ICON} />
-      </button>
-    )}
-    <button type="button" className="btn btn-ghost btn-icon btn-sm admin-icon-danger" onClick={onDelete}
-      title={deleteLabel} aria-label={`${deleteLabel}: ${label}`}>
-      <Trash2 {...ICON} />
-    </button>
-  </div>
-);
-
 const AdminPanel = () => {
   const { isAdmin, user } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
   const tabRefs = useRef({});
   const [activeTab, setActiveTab] = useState('announcements');
+  const [associationsCount, setAssociationsCount] = useState(null);
   const [usersList, setUsersList] = useState([]);
 
   // Redirect non-admins
@@ -452,6 +391,7 @@ const AdminPanel = () => {
 
   const tabs = [
     { id: 'announcements', label: 'Объявления', count: announcements.length },
+    { id: 'associations', label: 'Объединения', count: associationsCount },
     { id: 'teachers', label: 'Преподаватели', count: teachers.length },
     { id: 'subjects', label: 'Предметы', count: subjects.length },
     { id: 'faq', label: 'FAQ', count: faqItems.length },
@@ -507,7 +447,7 @@ const AdminPanel = () => {
               onKeyDown={e => handleTabKeyDown(e, index)}
             >
               <span>{tab.label}</span>
-              <span className="badge tabular admin-tab-count">{tab.count}</span>
+              {tab.count != null && <span className="badge tabular admin-tab-count">{tab.count}</span>}
             </button>
           );
         })}
@@ -610,6 +550,11 @@ const AdminPanel = () => {
             )}
           </div>
         </section>
+      )}
+
+      {/* ASSOCIATIONS TAB */}
+      {activeTab === 'associations' && (
+        <AdminAssociations panelProps={panelProps('associations')} onCount={setAssociationsCount} />
       )}
 
       {/* TEACHERS TAB */}

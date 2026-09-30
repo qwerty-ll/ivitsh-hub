@@ -455,3 +455,20 @@
 @media (prefers-reduced-motion: reduce) {
   .admin-tab::after { transition: none; }
 }
+
+/* Associations: leaders as chips, one-click suggestions, the leader search */
+.admin-assoc-leaders { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.admin-assoc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-left: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.admin-assoc-picker { display: flex; flex-direction: column; gap: var(--space-2); width: 100%; max-width: 28rem; }
+.admin-assoc-results { list-style: none; display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+.admin-row-muted .admin-cell-title { color: var(--text-2); }
+

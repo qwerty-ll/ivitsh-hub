@@ -19,6 +19,9 @@ CSRF_HEADER_VALUE = "XMLHttpRequest"
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/admin-login", auto_error=False)
 
+# users.last_seen_at is written at most this often per user
+LAST_SEEN_EVERY = timedelta(minutes=10)
+
 
 def _bcrypt_input(password: str) -> bytes:
     # bcrypt only uses the first 72 bytes and bcrypt>=5 rejects longer input.
@@ -118,7 +121,23 @@ def get_current_user(
     user = db.query(models.User).filter(models.User.username == payload["sub"]).first()
     if not user or user.is_blocked:
         return None
+    touch_last_seen(user, db)
     return user
+
+
+def touch_last_seen(user: models.User, db: Session) -> None:
+    """Record activity for the "active this semester" statistics; never breaks the request."""
+    now = datetime.now(timezone.utc)
+    seen = user.last_seen_at
+    if seen is not None and seen.tzinfo is None:  # SQLite returns naive datetimes
+        seen = seen.replace(tzinfo=timezone.utc)
+    if seen is not None and now - seen < LAST_SEEN_EVERY:
+        return
+    try:
+        user.last_seen_at = now
+        db.commit()
+    except Exception:
+        db.rollback()
 
 
 def require_current_user(user: Optional[models.User] = Depends(get_current_user)) -> models.User:

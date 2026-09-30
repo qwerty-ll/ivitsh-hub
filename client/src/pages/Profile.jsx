@@ -10,6 +10,7 @@ import { useToast } from '../context/ToastContext';
 import { forumApi } from '../services/api';
 import { useInstallApp } from '../utils/install';
 import SectionIcon from '../components/SectionIcon';
+import { ProfileAssociations, ProfileContacts } from '../components/ProfileCommunity';
 import { initialsOf, shrinkAvatar } from '../utils/avatar';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
@@ -413,6 +414,10 @@ const Profile = () => {
               </li>
             </ul>
           </section>
+
+          {/* ASSOCIATIONS & ACHIEVEMENTS, CONTACTS FOR LEADERS */}
+          <ProfileAssociations />
+          <ProfileContacts />
 
           {/* ON THE PHONE: install the portal as an app */}
           <section aria-labelledby="profile-phone-title">

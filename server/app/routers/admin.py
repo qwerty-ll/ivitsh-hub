@@ -25,16 +25,20 @@ def _get_manageable_user(db: Session, user_id: int, current_user: models.User) -
 def get_all_users(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    q: str = Query("", max_length=100),
     current_user: models.User = Depends(security.require_admin),
     db: Session = Depends(get_db)
 ):
-    return (
-        db.query(models.User)
-        .order_by(models.User.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-        .all()
-    )
+    query = db.query(models.User).order_by(models.User.created_at.desc())
+    needle = q.strip().casefold()
+    if needle:
+        # Search by name, login or group; in Python because SQLite does not fold Cyrillic case
+        found = [
+            u for u in query.all()
+            if needle in f"{u.full_name} {u.username} {u.group_number or ''}".casefold()
+        ]
+        return found[offset:offset + limit]
+    return query.limit(limit).offset(offset).all()
 
 
 @router.patch("/admin/users/{user_id}/role", response_model=schemas.UserResponse)

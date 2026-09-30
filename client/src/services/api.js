@@ -102,7 +102,11 @@ export const apiFetch = async (endpoint, options = {}) => {
 
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
-      const detail = typeof errorData.detail === 'string' ? errorData.detail : `Ошибка сервера: ${res.status}`;
+      // FastAPI validation errors (422) carry a list; show the first message without pydantic's prefix
+      const firstIssue = Array.isArray(errorData.detail) ? errorData.detail[0]?.msg : null;
+      const detail = typeof errorData.detail === 'string'
+        ? errorData.detail
+        : (typeof firstIssue === 'string' ? firstIssue.replace(/^Value error, /, '') : `Ошибка сервера: ${res.status}`);
       if (res.status === 401 && !LOGIN_ENDPOINTS.includes(endpoint)) {
         window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
       }
@@ -174,6 +178,21 @@ export const adminApi = {
   // Users
   getUsers: (limit = 100, offset = 0) =>
     apiFetch(`/api/v1/admin/users?limit=${limit}&offset=${offset}`),
+  searchUsers: (q) =>
+    apiFetch(`/api/v1/admin/users?limit=20&q=${encodeURIComponent(q)}`),
+
+  // Associations
+  getAssociations: () => apiFetch('/api/v1/admin/associations'),
+  createAssociation: (data) =>
+    apiFetch('/api/v1/admin/associations', json('POST', data)),
+  updateAssociation: (id, data) =>
+    apiFetch(`/api/v1/admin/associations/${id}`, json('PUT', data)),
+  deleteAssociation: (id) =>
+    apiFetch(`/api/v1/admin/associations/${id}`, { method: 'DELETE' }),
+  addLeader: (id, userId) =>
+    apiFetch(`/api/v1/admin/associations/${id}/leaders/${userId}`, { method: 'PUT' }),
+  removeLeader: (id, userId) =>
+    apiFetch(`/api/v1/admin/associations/${id}/leaders/${userId}`, { method: 'DELETE' }),
   updateUserRole: (userId, role) =>
     apiFetch(`/api/v1/admin/users/${userId}/role`, json('PATCH', { role })),
   setUserBlocked: (userId, blocked) =>
@@ -304,4 +323,21 @@ export const documentsApi = {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     return name;
   },
+};
+
+// Student associations: catalog, applications, moderation by leaders
+export const associationsApi = {
+  list: () => apiFetch('/api/v1/associations'),
+  get: (id) => apiFetch(`/api/v1/associations/${id}`),
+  mine: () => apiFetch('/api/v1/associations/mine'),
+  apply: (id, message = '') =>
+    apiFetch(`/api/v1/associations/${id}/apply`, json('POST', { message: message || null })),
+  leave: (id) =>
+    apiFetch(`/api/v1/associations/${id}/membership`, { method: 'DELETE' }),
+  edit: (id, data) =>
+    apiFetch(`/api/v1/associations/${id}`, json('PUT', data)),
+  decide: (id, userId, approve) =>
+    apiFetch(`/api/v1/associations/${id}/members/${userId}/decision`, json('POST', { approve })),
+  removeMember: (id, userId) =>
+    apiFetch(`/api/v1/associations/${id}/members/${userId}`, { method: 'DELETE' }),
 };

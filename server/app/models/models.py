@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, UniqueConstraint, false
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, UniqueConstraint, false, true
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 
@@ -31,11 +31,19 @@ class User(Base):
     # When the student last agreed to personal data processing at sign-in, and to which text version
     pd_consent_at = Column(DateTime(timezone=True), nullable=True)
     pd_consent_version = Column(String, nullable=True)
+    # Contacts the student chose to share: seen by leaders of their associations
+    # (and, for a leader, by every signed-in student in the catalog)
+    tg_username = Column(String, nullable=True)
+    vk_url = Column(String, nullable=True)
+    max_contact = Column(String, nullable=True)
+    # Last request with a valid session, refreshed at most every few minutes ("active this semester")
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     questions = relationship("ForumQuestion", back_populates="author", cascade="all, delete-orphan")
     answers = relationship("ForumAnswer", back_populates="author", cascade="all, delete-orphan")
     votes = relationship("Vote", back_populates="user", cascade="all, delete-orphan")
+    memberships = relationship("Membership", back_populates="user", cascade="all, delete-orphan")
 
 
 class ForumQuestion(Base):
@@ -146,3 +154,40 @@ class RevokedToken(Base):
     id = Column(Integer, primary_key=True, index=True)
     jti = Column(String, unique=True, index=True, nullable=False)
     revoked_at = Column(DateTime(timezone=True), default=_utcnow)
+
+
+class Association(Base):
+    """A student association of the institute (club, media team, volunteers...)."""
+    __tablename__ = "associations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+    description = Column(Text, nullable=False, default="", server_default="")
+    # Public contact of the association itself: a chat or community link, a room
+    contacts = Column(String, nullable=True)
+    # Leader's name from the institute's list, shown to the admin until a real account is assigned
+    leader_hint = Column(String, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True, server_default=true())
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    memberships = relationship("Membership", back_populates="association", cascade="all, delete-orphan")
+
+
+class Membership(Base):
+    """A student's application to / place in an association. One row per (user, association)."""
+    __tablename__ = "memberships"
+    __table_args__ = (UniqueConstraint("user_id", "association_id", name="uq_membership_user_association"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    association_id = Column(Integer, ForeignKey("associations.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String, nullable=False, default="member", server_default="member")  # "member" | "leader"
+    status = Column(String, nullable=False, default="pending", server_default="pending")  # "pending" | "approved" | "rejected" | "left"
+    # A short note from the applicant to the leader
+    message = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    # When the application was last decided (approved, rejected, left)
+    decided_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User", back_populates="memberships")
+    association = relationship("Association", back_populates="memberships")
