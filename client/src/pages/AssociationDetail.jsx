@@ -4,6 +4,7 @@ import {
   ArrowLeft, Users, LogIn, Check, X, UserMinus, Clock, Info, RotateCw, Loader2, Plus
 } from 'lucide-react';
 import AssociationPosts from '../components/AssociationPosts';
+import AssociationMeetings from '../components/AssociationMeetings';
 import ContactLinks from '../components/ContactLinks';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -210,7 +211,10 @@ const AssociationDetail = () => {
             </section>
           )}
 
-          {/* ANNOUNCEMENTS: for members and leaders */}
+          {/* MEETINGS and ANNOUNCEMENTS: for members and leaders */}
+          {(isMember || data.can_manage) && (
+            <AssociationMeetings associationId={data.id} associationName={data.name} canManage={data.can_manage} />
+          )}
           {(isMember || data.can_manage) && (
             <AssociationPosts associationId={data.id} canManage={data.can_manage} members={data.members} />
           )}
@@ -227,7 +231,7 @@ const AssociationDetail = () => {
               </>
             ) : isLeader || data.can_manage ? (
               <>
-                <p className="assoc-muted">Заявки и участники — в «Управлении», задачи — в разделе «Задачи».</p>
+                <p className="assoc-muted">Заявки и участники — в «Управлении», собрания — ниже на этой странице, задачи — в разделе «Задачи».</p>
                 <div className="assoc-leader-actions">
                   <Link to={`/tasks?new=1&association=${data.id}`} className="btn btn-primary"><Plus size={16} {...ICON} />Поставить задачу</Link>
                   <Link to={`/tasks?tab=managed&association=${data.id}`} className="btn btn-secondary">Задачи объединения</Link>

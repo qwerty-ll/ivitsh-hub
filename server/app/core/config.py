@@ -52,6 +52,9 @@ class Settings:
 
         self.EIOS_BASE_URL = os.getenv("EIOS_BASE_URL", "https://eios.kosgos.ru/api").rstrip("/")
         self.VERIFY_SSL = _bool("VERIFY_SSL", True)
+        # SDO (Moodle): the same login and password as EIOS. Empty SDO_BASE_URL turns the course list off.
+        self.SDO_BASE_URL = os.getenv("SDO_BASE_URL", "https://sdo.kosgos.ru").strip().rstrip("/")
+        self.SDO_SERVICE = os.getenv("SDO_SERVICE", "moodle_mobile_app").strip()
 
         # GigaChat "Authorization key" (base64 of client_id:client_secret) from the Sber developer console.
         self.GIGACHAT_AUTH_KEY = os.getenv("GIGACHAT_AUTH_KEY") or os.getenv("GIGACHAT_SECRET", "")

@@ -12,6 +12,7 @@ import CookieNotice from './components/CookieNotice';
 // Lazy Loaded Pages for Optimal Bundle Splitting
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Schedule = lazy(() => import('./pages/Schedule'));
+const Calendar = lazy(() => import('./pages/Calendar'));
 const Tasks = lazy(() => import('./pages/Tasks'));
 const TaskDetail = lazy(() => import('./pages/TaskDetail'));
 const Associations = lazy(() => import('./pages/Associations'));
@@ -99,6 +100,7 @@ function App() {
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/calendar" element={<Calendar />} />
             <Route path="/schedule" element={<Schedule />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/tasks/:id" element={<TaskDetail />} />

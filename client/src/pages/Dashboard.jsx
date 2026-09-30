@@ -5,12 +5,14 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ScheduleWidget from '../components/ScheduleWidget';
+import { TodayCard, MyTasksCard } from '../components/DashboardToday';
 import SectionIcon from '../components/SectionIcon';
 import { SECTIONS } from '../data/sections';
-import { contentApi } from '../services/api';
+import { calendarApi, contentApi, tasksApi } from '../services/api';
 import { openChat } from '../utils/chat';
 import { markStep, readSteps, ONBOARDING_EVENT } from '../utils/onboarding';
 import { subgroupOf, cleanLessonTitle } from '../utils/lessons';
+import { dayKey, fitsSubgroup, readSubgroup, timeLabel } from '../utils/calendar';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 
@@ -174,8 +176,37 @@ const Dashboard = () => {
     }).catch(e => console.warn('Failed to load DB announcements on Dashboard:', e));
   }, []);
 
-  // --- Today's lessons, reported by the schedule widget ---
-  const [groupLessons, setGroupLessons] = useState(null);
+  // --- Signed in: the coming week from the calendar (lessons, meetings, deadlines) and open tasks ---
+  const [calendar, setCalendar] = useState(null);
+  const [myCards, setMyCards] = useState(null);
+  useEffect(() => {
+    if (!isLoggedIn) { setCalendar(null); setMyCards(null); return; }
+    calendarApi.get(dayKey(new Date()), 8)
+      .then(setCalendar)
+      .catch(() => setCalendar({ items: [], lessons: 'unavailable' }));
+    tasksApi.my().then(res => setMyCards(res || [])).catch(() => setMyCards([]));
+  }, [isLoggedIn]);
+  const subgroup = readSubgroup();
+  const calendarItems = (calendar?.items || []).filter(i => fitsSubgroup(i, subgroup));
+  // Without a group EIOS knows, the schedule widget (with its group / teacher chooser) stays
+  const calendarLessons = isLoggedIn && calendar && calendar.lessons !== 'no_group';
+
+  // --- Today's lessons: from the calendar, or reported by the schedule widget ---
+  const [widgetLessons, setGroupLessons] = useState(null);
+  const groupLessons = calendarLessons
+    ? {
+        group: calendar.group,
+        // In the shape of EIOS rows, which the hero summary reads
+        lessons: calendarItems.filter(i => i.type === 'lesson').map(i => ({
+          дата: dayKey(new Date(i.starts_at)),
+          начало: timeLabel(i.starts_at),
+          конец: timeLabel(i.ends_at),
+          дисциплина: i.title,
+          аудитория: i.place,
+          номерПодгруппы: i.subgroup,
+        })),
+      }
+    : widgetLessons;
   const ownGroup = user?.group ? { id: user.groupId || null, name: user.group } : null;
   // Re-render every 30 s so "сейчас идёт / следующая" follows the clock
   const [, setClockTick] = useState(0);
@@ -323,11 +354,18 @@ const Dashboard = () => {
 
       <div className="dash-grid">
         {/* TODAY: the nearest pairs; the full schedule has its own page */}
-        <section id="schedule-section" className="dash-main" aria-labelledby="schedule-title">
-          <ScheduleWidget onGroupLessons={setGroupLessons} ownGroup={ownGroup} compact />
+        <section id="schedule-section" className="dash-main" aria-labelledby={isLoggedIn && calendarLessons ? 'today-title' : 'schedule-title'}>
+          {!calendarLessons && (isLoggedIn ? calendar : true) && (
+            <ScheduleWidget onGroupLessons={setGroupLessons} ownGroup={ownGroup} compact />
+          )}
+          {isLoggedIn && (calendar
+            ? <TodayCard items={calendarItems.filter(i => calendarLessons || i.type !== 'lesson')} status={calendar.lessons} />
+            : <span className="skeleton dash-today-skeleton" aria-busy="true" />)}
         </section>
 
         <div className="dash-aside">
+          {isLoggedIn && <MyTasksCard cards={myCards} />}
+
           {/* ANNOUNCEMENTS: hidden until there are any */}
           {announcements.length > 0 && (
           <section id="announcements-section" className="card dash-card" aria-labelledby="announcements-title">
@@ -373,7 +411,8 @@ const Dashboard = () => {
           </section>
           )}
 
-          {/* ONBOARDING: progress and the one next step; the full list on demand */}
+          {/* ONBOARDING (guests): progress and the one next step; the full list on demand */}
+          {!isLoggedIn && (
           <section className="card dash-card dash-onboarding" aria-labelledby="onboarding-title">
             <div className="dash-card-head">
               <h2 id="onboarding-title">Знакомство с порталом</h2>
@@ -445,6 +484,7 @@ const Dashboard = () => {
               </ul>
             )}
           </section>
+          )}
         </div>
       </div>
     </div>

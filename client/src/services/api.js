@@ -386,3 +386,28 @@ export const attachmentsApi = {
   // Downloads are plain links: the session cookie goes along, the server checks the rights
   href: (id) => `${API_BASE_URL}/api/v1/attachments/${id}`,
 };
+
+// The student's calendar: lessons, meetings, deadlines and group homework for a range of days
+export const calendarApi = {
+  get: (start, days = 7) => apiFetch(`/api/v1/calendar?start=${start}&days=${days}`),
+  courses: () => apiFetch('/api/v1/calendar/courses'),
+};
+
+// Association meetings
+export const meetingsApi = {
+  list: (associationId, past = false) =>
+    apiFetch(`/api/v1/associations/${associationId}/meetings${past ? '?past=true' : ''}`),
+  create: (associationId, data) => apiFetch(`/api/v1/associations/${associationId}/meetings`, json('POST', data)),
+  get: (id) => apiFetch(`/api/v1/meetings/${id}`),
+  edit: (id, data) => apiFetch(`/api/v1/meetings/${id}`, json('PUT', data)),
+  remove: (id) => apiFetch(`/api/v1/meetings/${id}`, { method: 'DELETE' }),
+  attendance: (id, userIds) => apiFetch(`/api/v1/meetings/${id}/attendance`, json('PUT', { user_ids: userIds })),
+};
+
+// Homework, deadlines and notes of the student's academic group
+export const homeworkApi = {
+  list: (past = false) => apiFetch(`/api/v1/homework${past ? '?past=true' : ''}`),
+  create: (data) => apiFetch('/api/v1/homework', json('POST', data)),
+  edit: (id, data) => apiFetch(`/api/v1/homework/${id}`, json('PUT', data)),
+  remove: (id) => apiFetch(`/api/v1/homework/${id}`, { method: 'DELETE' }),
+};

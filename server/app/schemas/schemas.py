@@ -1,7 +1,7 @@
 import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Any, Dict, Optional, List, Literal
-from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator, model_validator
 
 
 # --- Contacts a student shares with association leaders ---
@@ -553,3 +553,133 @@ class PostItem(BaseModel):
     # Only for its association's leaders
     recipients: List[UserBrief] = []
     can_manage: bool = False
+
+
+# --- Meetings ---
+class MeetingIn(BaseModel):
+    title: str = Field("Собрание", max_length=200)
+    starts_at: datetime
+    ends_at: datetime
+    place: str = Field("", max_length=200)
+    agenda: str = Field("", max_length=5000)
+    summary: str = Field("", max_length=5000)
+
+    @field_validator("title")
+    @classmethod
+    def clean_title(cls, v: str) -> str:
+        return " ".join(v.split()) or "Собрание"
+
+    @field_validator("place")
+    @classmethod
+    def clean_place(cls, v: str) -> str:
+        return " ".join(v.split())
+
+    @field_validator("starts_at", "ends_at")
+    @classmethod
+    def aware(cls, v: datetime) -> datetime:
+        return _utc_or_none(v)
+
+    @model_validator(mode="after")
+    def check_times(self):
+        if self.ends_at <= self.starts_at:
+            raise ValueError("Собрание должно заканчиваться позже, чем начинается")
+        if self.ends_at - self.starts_at > timedelta(hours=12):
+            raise ValueError("Собрание не может длиться дольше 12 часов")
+        return self
+
+
+class AttendanceIn(BaseModel):
+    user_ids: List[int] = Field(default_factory=list, max_length=500)
+
+
+class MeetingItem(BaseModel):
+    id: int
+    title: str
+    starts_at: UtcDateTime
+    ends_at: UtcDateTime
+    place: str = ""
+    agenda: str = ""
+    summary: str = ""
+    association: AssociationRef
+    created_by: Optional[str] = None
+    can_manage: bool = False
+    # Leaders only: members with a mark whether they came
+    attendance: List[Dict] = []
+    attended_count: Optional[int] = None
+
+
+# --- Group homework ---
+class HomeworkIn(BaseModel):
+    subject: str = Field("", max_length=200)
+    text: str = Field(..., min_length=1, max_length=5000)
+    due_at: Optional[datetime] = None
+
+    @field_validator("subject")
+    @classmethod
+    def clean_subject(cls, v: str) -> str:
+        return " ".join(v.split())
+
+    @field_validator("text")
+    @classmethod
+    def clean_text(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Напишите, что задано")
+        return v
+
+    @field_validator("due_at")
+    @classmethod
+    def aware_due(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return _utc_or_none(v)
+
+
+class HomeworkItem(BaseModel):
+    id: int
+    subject: str = ""
+    text: str
+    due_at: Optional[UtcDateTime] = None
+    group_number: str
+    author: Optional[str] = None
+    created_at: Optional[UtcDateTime] = None
+    updated_at: Optional[UtcDateTime] = None
+    can_edit: bool = False
+
+
+# --- Calendar ---
+class SdoCourseItem(BaseModel):
+    id: int
+    name: str
+    url: str
+
+
+class CalendarItem(BaseModel):
+    """One entry: a lesson, a meeting, a task deadline or a homework deadline."""
+    type: Literal["lesson", "meeting", "task", "homework"]
+    id: str
+    title: str
+    starts_at: UtcDateTime
+    # Absent for deadlines, which are a point in time
+    ends_at: Optional[UtcDateTime] = None
+    place: str = ""
+    # Lessons
+    kind: Optional[str] = None
+    teacher: Optional[str] = None
+    subgroup: int = 0
+    replaced: bool = False
+    course: Optional[SdoCourseItem] = None
+    # Meetings and association tasks
+    association: Optional[AssociationRef] = None
+    # Tasks and homework
+    ref_id: Optional[int] = None
+    status: Optional[str] = None
+    color: Optional[str] = None
+    text: str = ""
+
+
+class CalendarOut(BaseModel):
+    start: str
+    end: str
+    group: Optional[str] = None
+    # ok | stale (EIOS is down, the last saved copy) | unavailable | no_group
+    lessons: Literal["ok", "stale", "unavailable", "no_group"]
+    items: List[CalendarItem]

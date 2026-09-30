@@ -37,6 +37,8 @@ class User(Base):
     max_contact = Column(String, nullable=True)
     # Last request with a valid session, refreshed at most every few minutes ("active this semester")
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    # When the SDO (Moodle) course list was last fetched at sign-in
+    sdo_synced_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 
     questions = relationship("ForumQuestion", back_populates="author", cascade="all, delete-orphan")
@@ -295,3 +297,64 @@ class Attachment(Base):
     task = relationship("Task", back_populates="attachments")
     post = relationship("AssociationPost", back_populates="attachments")
     uploaded_by = relationship("User")
+
+
+class SdoCourse(Base):
+    """A course the student is enrolled in on SDO (Moodle): refreshed at every EIOS sign-in."""
+    __tablename__ = "sdo_courses"
+    __table_args__ = (UniqueConstraint("user_id", "course_id", name="uq_sdo_course_user"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    # Moodle course id: the link is SDO_BASE_URL/course/view.php?id=<course_id>
+    course_id = Column(Integer, nullable=False)
+    name = Column(String, nullable=False)
+
+
+class Meeting(Base):
+    """A meeting of an association: in the calendar of its members, with a summary afterwards."""
+    __tablename__ = "meetings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    association_id = Column(Integer, ForeignKey("associations.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    title = Column(String, nullable=False)
+    starts_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    ends_at = Column(DateTime(timezone=True), nullable=False)
+    place = Column(String, nullable=False, default="", server_default="")
+    # What it is about (before) and what was decided (after)
+    agenda = Column(Text, nullable=False, default="", server_default="")
+    summary = Column(Text, nullable=False, default="", server_default="")
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    association = relationship("Association")
+    created_by = relationship("User")
+    attendance = relationship("MeetingAttendance", cascade="all, delete-orphan")
+
+
+class MeetingAttendance(Base):
+    """Who was at a meeting, marked by a leader: a row means present."""
+    __tablename__ = "meeting_attendance"
+    __table_args__ = (UniqueConstraint("meeting_id", "user_id", name="uq_meeting_attendance"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+
+class GroupHomework(Base):
+    """Homework, a deadline or a note inside an academic group: every student of the group sees it."""
+    __tablename__ = "group_homework"
+
+    id = Column(Integer, primary_key=True, index=True)
+    # Normalized group name (lower case, ё→е, no spaces): SQLite cannot fold Cyrillic case itself
+    group_key = Column(String, nullable=False, index=True)
+    group_number = Column(String, nullable=False)
+    subject = Column(String, nullable=False, default="", server_default="")
+    text = Column(Text, nullable=False)
+    due_at = Column(DateTime(timezone=True), nullable=True)
+    created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_by = relationship("User")

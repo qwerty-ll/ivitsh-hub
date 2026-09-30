@@ -4,14 +4,14 @@ import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Response, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core import rate_limit
 from app.db.database import get_db
-from app.services import eios
+from app.services import eios, sdo
 import app.models as models
 import app.schemas as schemas
 import app.core.security as security
@@ -112,7 +112,13 @@ def admin_login(user_in: schemas.UserLogin, request: Request, response: Response
 
 
 @router.post("/eios-login", response_model=schemas.LoginResponse)
-async def eios_login(req: schemas.EiosLoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+async def eios_login(
+    req: schemas.EiosLoginRequest,
+    request: Request,
+    response: Response,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     username = req.username.strip()
     password = req.password  # passwords may legitimately start or end with spaces
     if not username or not password:
@@ -208,6 +214,9 @@ async def eios_login(req: schemas.EiosLoginRequest, request: Request, response: 
 
     rate_limit.login_failures_by_user.reset(user_key)
     logger.info("EIOS login succeeded for %r", db_user.username)
+    # SDO shares the EIOS password: refresh the course list after the response, never delaying the sign-in
+    if settings.SDO_BASE_URL:
+        background.add_task(sdo.sync_courses, db_user.id, username, password)
     return _login_response(response, db_user)
 
 

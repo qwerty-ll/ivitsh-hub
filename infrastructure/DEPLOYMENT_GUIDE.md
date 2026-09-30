@@ -92,6 +92,12 @@ docker compose -f infrastructure/docker-compose.yml exec backend python -m app.s
 HTTP 429. Портал выстраивает вопросы в очередь (`GIGACHAT_MAX_STREAMS=1`); кто ждал бы дольше 5 секунд,
 сразу получает ответ из базы. Backend должен работать в одном процессе uvicorn, иначе очередей станет несколько.
 
+### Шаг 4а. СДО КГУ (курсы в календаре)
+При входе через ЭИОС портал тем же логином и паролем запрашивает у `SDO_BASE_URL` (по умолчанию
+`https://sdo.kosgos.ru`) список курсов студента через мобильный сервис Moodle (`SDO_SERVICE=moodle_mobile_app`,
+он должен быть включён в СДО). Запрос идёт после ответа на вход и ни на что не влияет при ошибке — смотрите
+предупреждения `ivitsh_portal.sdo` в логах. Пустой `SDO_BASE_URL` отключает запрос.
+
 ### Шаг 5. Запуск
 ```bash
 docker compose -f infrastructure/docker-compose.yml up -d --build
