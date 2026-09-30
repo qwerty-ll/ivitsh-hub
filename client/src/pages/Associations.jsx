@@ -4,7 +4,7 @@ import { Search, SearchX, Users, ChevronRight, LogIn, RotateCw } from 'lucide-re
 import SectionIcon from '../components/SectionIcon';
 import { useAuth } from '../context/AuthContext';
 import { associationsApi } from '../services/api';
-import { STATUS_BADGE, monogram, plural, shortName } from '../utils/associations';
+import { STATUS_BADGE, monogram, plural, shortName, assocHue } from '../utils/associations';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 
@@ -98,7 +98,7 @@ const Associations = () => {
             return (
               <li key={a.id}>
                 <Link to={`/associations/${a.id}`} className="assoc-card">
-                  <span className="assoc-mono" aria-hidden="true">{monogram(a.name)}</span>
+                  <span className={`assoc-mono hue-${assocHue(a.id)}`} aria-hidden="true">{monogram(a.name)}</span>
                   <span className="assoc-card-main">
                     <span className="assoc-card-name">{a.name}</span>
                     <span className="assoc-card-meta">

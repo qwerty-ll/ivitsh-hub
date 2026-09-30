@@ -4,10 +4,11 @@ import {
   LogIn, LogOut, Camera, AlertCircle, Clock, Loader2, Eye, EyeOff, CalendarDays,
   Smartphone, Share
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { forumApi } from '../services/api';
+import { forumApi, progressApi } from '../services/api';
+import { BadgeGrid, LevelCard, PointsRules } from '../components/Progress';
 import { useInstallApp } from '../utils/install';
 import SectionIcon from '../components/SectionIcon';
 import { ProfileAssociations, ProfileContacts } from '../components/ProfileCommunity';
@@ -52,9 +53,16 @@ const Profile = () => {
 
   // Activity stats from the API
   const [forumQuestionsCount, setForumQuestionsCount] = useState(0);
+  const [progress, setProgress] = useState(null);
+  // /profile#achievements (from the dashboard) opens at the badges once they are loaded
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (progress && hash === '#achievements') document.getElementById('achievements')?.scrollIntoView({ block: 'start' });
+  }, [progress, hash]);
 
   useEffect(() => {
     if (!user) return;
+    progressApi.get().then(setProgress).catch(() => setProgress(null));
 
     forumApi.getQuestions('', '', 200, 0, user.id)
       .then(res => setForumQuestionsCount(Array.isArray(res) ? res.length : 0))
@@ -167,11 +175,11 @@ const Profile = () => {
             </p>
             <ul className="login-perks">
               <li>
-                <SectionIcon section="forum" size="sm" quiet />
+                <SectionIcon section="forum" size="sm" />
                 <span>Вопросы и ответы на форуме от вашего имени</span>
               </li>
               <li>
-                <span className="tile tile-sm tile-quiet" aria-hidden="true"><CalendarDays size={16} strokeWidth={1.75} /></span>
+                <span className="tile tile-sm hue-orange" aria-hidden="true"><CalendarDays size={16} strokeWidth={1.75} /></span>
                 <span>Расписание вашей группы на главной</span>
               </li>
             </ul>
@@ -393,6 +401,20 @@ const Profile = () => {
         </section>
 
         <div className="profile-main">
+          {/* ACHIEVEMENTS: level, points ("биты") and badges */}
+          {progress && (
+            <section id="achievements" aria-labelledby="profile-achievements-title">
+              <div className="section-header">
+                <h2 id="profile-achievements-title">Достижения</h2>
+              </div>
+              <div className="card achievements-card">
+                <LevelCard data={progress} />
+                <BadgeGrid badges={progress.badges} />
+                <PointsRules rules={progress.rules} />
+              </div>
+            </section>
+          )}
+
           {/* REAL STATISTICS */}
           <section aria-labelledby="profile-activity-title">
             <div className="section-header">
@@ -401,7 +423,7 @@ const Profile = () => {
 
             <ul className="card list profile-stats">
               <li className="list-row profile-stat">
-                <SectionIcon section="forum" quiet />
+                <SectionIcon section="forum" />
                 <div className="profile-stat-body">
                   <div className="profile-stat-head">
                     <div className="profile-stat-text">
@@ -427,7 +449,7 @@ const Profile = () => {
 
             <ul className="card list profile-phone">
               <li className="list-row profile-phone-row">
-                <span className="tile tile-quiet" aria-hidden="true"><Smartphone size={20} {...ICON} /></span>
+                <span className="tile hue-cyan" aria-hidden="true"><Smartphone size={20} {...ICON} /></span>
                 <div className="profile-stat-text">
                   <span className="profile-stat-label">Портал как приложение</span>
                   <span className="profile-stat-meta">

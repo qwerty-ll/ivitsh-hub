@@ -13,7 +13,7 @@ import app.models as models
 import app.schemas as schemas
 import app.core.security as security
 from app.routers.tasks import attachment_item
-from app.services import pgas, timetable, uploads
+from app.services import pgas, progress, timetable, uploads
 
 router = APIRouter(prefix="/api/v1", tags=["Achievements"])
 
@@ -182,3 +182,12 @@ def portfolio_export(
         "Content-Disposition": f"attachment; filename=\"pgas.{format}\"; filename*=UTF-8''{quote(name)}",
         "Cache-Control": "private, no-store",
     })
+
+
+@router.get("/progress")
+def my_progress(
+    user: models.User = Depends(security.require_current_user),
+    db: Session = Depends(get_db),
+):
+    """My points, level and badges: only the student sees their own."""
+    return progress.summary(db, user)

@@ -10,7 +10,7 @@ import ContactLinks from '../components/ContactLinks';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { associationsApi } from '../services/api';
-import { STATUS_BADGE, monogram, plural } from '../utils/associations';
+import { STATUS_BADGE, assocHue, monogram, plural } from '../utils/associations';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 const formatDate = (iso) => (iso ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '');
@@ -100,7 +100,7 @@ const AssociationDetail = () => {
       <Link to="/associations" className="assoc-back"><ArrowLeft size={16} {...ICON} />Все объединения</Link>
 
       <header className="assoc-head">
-        <span className="assoc-mono assoc-mono-lg" aria-hidden="true">{monogram(data.name)}</span>
+        <span className={`assoc-mono assoc-mono-lg hue-${assocHue(data.id)}`} aria-hidden="true">{monogram(data.name)}</span>
         <div className="assoc-head-text">
           <h1>{data.name}</h1>
           <p className="assoc-head-meta">

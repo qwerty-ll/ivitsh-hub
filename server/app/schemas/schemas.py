@@ -445,6 +445,12 @@ class TaskCard(BaseModel):
     comments_count: int = 0
     attachments_count: int = 0
     assignees_count: int = 1
+    archived_at: Optional[UtcDateTime] = None
+    completed_at: Optional[UtcDateTime] = None
+
+
+class ArchiveIn(BaseModel):
+    archived: bool = True
 
 
 class AssigneeItem(BaseModel):
@@ -467,6 +473,7 @@ class ManagedTask(BaseModel):
     counts: Dict[str, int]
     total: int
     created_at: Optional[UtcDateTime] = None
+    archived_at: Optional[UtcDateTime] = None
 
 
 class CommentItem(BaseModel):

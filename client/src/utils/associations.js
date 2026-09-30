@@ -25,3 +25,7 @@ export const plural = (n, [one, few, many]) => {
 
 // "Иванов Артём Сергеевич" -> "Иванов Артём"
 export const shortName = (fullName = '') => fullName.split(' ').slice(0, 2).join(' ');
+
+// Every association keeps one color wherever it shows up (its tile in the catalog, chips on task cards)
+const ASSOC_HUES = ['blue', 'orange', 'violet', 'green', 'pink', 'amber', 'cyan', 'olive', 'teal', 'red'];
+export const assocHue = (id) => ASSOC_HUES[Math.abs(Number(id) || 0) % ASSOC_HUES.length];

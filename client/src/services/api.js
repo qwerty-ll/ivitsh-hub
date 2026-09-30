@@ -350,10 +350,17 @@ export const tasksApi = {
     const q = new URLSearchParams();
     if (params.personal) q.set('personal', 'true');
     if (params.associationId) q.set('association_id', params.associationId);
+    if (params.archived) q.set('archived', 'true');
     return apiFetch(`/api/v1/tasks/my${q.toString() ? `?${q}` : ''}`);
   },
-  managed: (associationId) =>
-    apiFetch(`/api/v1/tasks/managed${associationId ? `?association_id=${associationId}` : ''}`),
+  managed: (associationId, archived = false) => {
+    const q = new URLSearchParams();
+    if (associationId) q.set('association_id', associationId);
+    if (archived) q.set('archived', 'true');
+    return apiFetch(`/api/v1/tasks/managed${q.toString() ? `?${q}` : ''}`);
+  },
+  archive: (id, archived = true) => apiFetch(`/api/v1/tasks/${id}/archive`, json('PATCH', { archived })),
+  archiveManaged: (id, archived = true) => apiFetch(`/api/v1/tasks/${id}/managed-archive`, json('PATCH', { archived })),
   get: (id) => apiFetch(`/api/v1/tasks/${id}`),
   create: (data) => apiFetch('/api/v1/tasks', json('POST', data)),
   edit: (id, data) => apiFetch(`/api/v1/tasks/${id}`, json('PUT', data)),
@@ -454,4 +461,9 @@ export const bookingApi = {
   mine: () => apiFetch('/api/v1/bookings/mine'),
   create: (data) => apiFetch('/api/v1/bookings', json('POST', data)),
   cancel: (id, reason = '') => apiFetch(`/api/v1/bookings/${id}/cancel`, json('POST', { reason })),
+};
+
+// My points ("биты"), level and badges
+export const progressApi = {
+  get: () => apiFetch('/api/v1/progress'),
 };

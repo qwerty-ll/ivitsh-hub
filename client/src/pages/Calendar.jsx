@@ -279,7 +279,12 @@ const HomeworkDialog = ({ entry, onClose, onEdit, onDelete }) => (
 
 // --- Group homework and SDO courses under the calendar -----------------------------------------------
 
-const HomeworkList = ({ entries, group, onAdd, onOpen }) => (
+const HomeworkList = ({ entries, group, onAdd, onOpen }) => {
+  const [past, setPast] = useState(null);
+  const togglePast = () => (past === null
+    ? homeworkApi.list(true).then(r => setPast(r || [])).catch(() => setPast([]))
+    : setPast(null));
+  return (
   <section className="card cal-side-card hue-violet" aria-labelledby="hw-title">
     <div className="dash-card-head">
       <h2 id="hw-title">ДЗ группы {group}</h2>
@@ -303,8 +308,24 @@ const HomeworkList = ({ entries, group, onAdd, onOpen }) => (
         })}
       </ul>
     )}
+  <button type="button" className="btn btn-ghost btn-sm hw-past-toggle" aria-expanded={past !== null} onClick={togglePast}>
+      {past === null ? 'Прошедшие задания' : 'Скрыть прошедшие'}
+    </button>
+    {past !== null && (past.length === 0 ? <p className="cal-empty">Прошедших заданий нет.</p> : (
+      <ul className="list cal-hw-list is-past">
+        {past.map(e => (
+          <li key={e.id}>
+            <button type="button" className="cal-hw-row" onClick={() => onOpen(e)}>
+              <span className="cal-hw-subject">{e.subject || 'Заметка'}</span>
+              <span className="cal-hw-text">{e.text}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    ))}
   </section>
 );
+};
 
 const CourseList = ({ courses }) => (
   <section className="card cal-side-card" aria-labelledby="courses-title">

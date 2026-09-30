@@ -3,7 +3,7 @@
 Rights: an assignee sees the task and moves their own card up to "На проверке"; the association's
 leaders and administrators manage the task and every card; a personal task belongs to its author.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,6 +20,8 @@ router = APIRouter(prefix="/api/v1", tags=["Tasks"])
 
 # Handed in: the moment of reaching one of these counts for "on time / late"
 _HANDED_IN = ("review", "done")
+# A "Готово" card leaves the board for the archive after this long
+ARCHIVE_AFTER = timedelta(days=7)
 
 
 def _now() -> datetime:
@@ -144,6 +146,8 @@ def set_status(card: models.TaskAssignee, status: str) -> None:
         card.completed_at = _now()
     elif status not in _HANDED_IN:
         card.completed_at = None
+    if status != "done":
+        card.archived_at = None
     card.status, card.status_changed_at = status, _now()
 
 
@@ -153,9 +157,22 @@ def set_status(card: models.TaskAssignee, status: str) -> None:
 def my_board(
     association_id: Optional[int] = Query(None, ge=1),
     personal: bool = False,
+    archived: bool = Query(False, description="The archive instead of the board"),
     user: models.User = Depends(security.require_current_user),
     db: Session = Depends(get_db),
 ):
+    # Cards "Готово" for a week go to the archive, so the board keeps only what is current
+    stale = (
+        db.query(models.TaskAssignee)
+        .filter(models.TaskAssignee.user_id == user.id, models.TaskAssignee.status == "done",
+                models.TaskAssignee.archived_at.is_(None),
+                models.TaskAssignee.status_changed_at < _now() - ARCHIVE_AFTER)
+        .all()
+    )
+    for card in stale:
+        card.archived_at = _now()
+    if stale:
+        db.commit()
     query = (
         db.query(models.TaskAssignee)
         .join(models.Task)
@@ -165,7 +182,8 @@ def my_board(
             joinedload(models.TaskAssignee.task).selectinload(models.Task.attachments),
             joinedload(models.TaskAssignee.task).selectinload(models.Task.assignees),
         )
-        .filter(models.TaskAssignee.user_id == user.id)
+        .filter(models.TaskAssignee.user_id == user.id,
+                models.TaskAssignee.archived_at.isnot(None) if archived else models.TaskAssignee.archived_at.is_(None))
     )
     if personal:
         query = query.filter(models.Task.association_id.is_(None))
@@ -186,7 +204,13 @@ def my_board(
             "comments_count": len(task.comments),
             "attachments_count": len(task.attachments),
             "assignees_count": len(task.assignees),
+            "archived_at": card.archived_at,
+            "completed_at": card.completed_at,
         })
+    if archived:
+        # Most recently finished first
+        cards.sort(key=lambda c: schemas.as_utc(c["archived_at"]), reverse=True)
+        return cards[:300]
     # Nearest deadline first, tasks without one at the end
     far = datetime.max.replace(tzinfo=timezone.utc)
     cards.sort(key=lambda c: (schemas.as_utc(c["due_at"]) if c["due_at"] else far, c["id"]))
@@ -196,6 +220,7 @@ def my_board(
 @router.get("/tasks/managed", response_model=List[schemas.ManagedTask])
 def managed_tasks(
     association_id: Optional[int] = Query(None, ge=1),
+    archived: bool = Query(False, description="Tasks moved to the archive"),
     user: models.User = Depends(security.require_current_user),
     db: Session = Depends(get_db),
 ):
@@ -203,7 +228,8 @@ def managed_tasks(
     query = (
         db.query(models.Task)
         .options(joinedload(models.Task.association), selectinload(models.Task.assignees))
-        .filter(models.Task.association_id.isnot(None))
+        .filter(models.Task.association_id.isnot(None),
+                models.Task.archived_at.isnot(None) if archived else models.Task.archived_at.is_(None))
     )
     if association_id:
         query = query.filter(models.Task.association_id == association_id)
@@ -229,6 +255,7 @@ def managed_tasks(
             "counts": counts,
             "total": len(task.assignees),
             "created_at": task.created_at,
+            "archived_at": task.archived_at,
         })
     return result
 
@@ -355,6 +382,49 @@ def remove_assignee(
 
 
 # --- Comments ------------------------------------------------------------------------------------
+
+@router.patch("/tasks/{task_id}/archive", response_model=schemas.TaskCard)
+def archive_my_card(
+    task_id: int,
+    data: schemas.ArchiveIn,
+    user: models.User = Depends(security.require_current_user),
+    db: Session = Depends(get_db),
+):
+    """Moves my finished card off the board, or brings it back."""
+    task = get_visible(db, task_id, user)
+    card = my_card(task, user)
+    if not card:
+        raise HTTPException(status_code=404, detail="Этой задачи нет на вашей доске")
+    if data.archived:
+        if card.status != "done":
+            raise HTTPException(status_code=400, detail="В архив уходят задачи со статусом «Готово»")
+        card.archived_at = card.archived_at or _now()
+    else:
+        # Back on the board for another week
+        card.archived_at, card.status_changed_at = None, _now()
+    db.commit()
+    return {
+        "id": task.id, "title": task.title, "due_at": task.due_at, "color": task.color, "association": _ref(task),
+        "my_status": card.status, "comments_count": len(task.comments), "attachments_count": len(task.attachments),
+        "assignees_count": len(task.assignees), "archived_at": card.archived_at, "completed_at": card.completed_at,
+    }
+
+
+@router.patch("/tasks/{task_id}/managed-archive", status_code=200)
+def archive_managed(
+    task_id: int,
+    data: schemas.ArchiveIn,
+    user: models.User = Depends(security.require_current_user),
+    db: Session = Depends(get_db),
+):
+    """Leaders move a task they set out of their list (assignees keep their cards)."""
+    task = get_managed(db, task_id, user)
+    if task.association_id is None:
+        raise HTTPException(status_code=400, detail="Личные задачи архивируются на доске")
+    task.archived_at = (task.archived_at or _now()) if data.archived else None
+    db.commit()
+    return {"archived": task.archived_at is not None}
+
 
 @router.post("/tasks/{task_id}/comments", response_model=schemas.CommentItem, status_code=201)
 def add_comment(

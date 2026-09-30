@@ -6,6 +6,7 @@ import { postsApi } from '../services/api';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 const EMPTY = { title: '', text: '', toAll: true, recipients: [] };
+const POSTS_SHOWN = 5;
 const when = (iso) => (iso ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '');
 
 /**
@@ -18,6 +19,8 @@ const AssociationPosts = ({ associationId, canManage, members }) => {
   const [form, setForm] = useState(EMPTY);
   const [writing, setWriting] = useState(false);
   const [saving, setSaving] = useState(false);
+  // The newest few; older ones on demand, so the page does not grow forever
+  const [showAll, setShowAll] = useState(false);
 
   const load = useCallback(() => {
     postsApi.list(associationId).then(res => setPosts(res || [])).catch(() => setPosts([]));
@@ -111,7 +114,7 @@ const AssociationPosts = ({ associationId, canManage, members }) => {
         !writing && <p className="assoc-muted">Объявлений пока нет. Здесь удобно держать ссылку на чат, распоряжения и материалы.</p>
       ) : (
         <ul className="posts">
-          {posts.map(p => (
+          {(showAll ? posts : posts.slice(0, POSTS_SHOWN)).map(p => (
             <li key={p.id} className="post">
               <div className="post-head">
                 <h3>{p.title}</h3>
@@ -138,6 +141,11 @@ const AssociationPosts = ({ associationId, canManage, members }) => {
             </li>
           ))}
         </ul>
+      )}
+      {posts.length > POSTS_SHOWN && (
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowAll(v => !v)}>
+          {showAll ? 'Свернуть' : `Показать более ранние (${posts.length - POSTS_SHOWN})`}
+        </button>
       )}
     </section>
   );

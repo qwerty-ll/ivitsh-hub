@@ -384,3 +384,5 @@
   .meeting-when .field:first-child { grid-column: 1 / -1; }
   .dash-task-row { flex-direction: column; gap: var(--space-1); }
 }
+.hw-past-toggle { margin-top: var(--space-2); }
+.cal-hw-list.is-past .cal-hw-subject { color: var(--text-2); }

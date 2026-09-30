@@ -211,6 +211,8 @@ class Task(Base):
     # Personal tasks only: one of the palette names the client knows ("blue", "green", ...)
     color = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
+    # Leaders' list of set tasks: moved out of the way by hand
+    archived_at = Column(DateTime(timezone=True), nullable=True)
 
     association = relationship("Association")
     created_by = relationship("User")
@@ -233,6 +235,8 @@ class TaskAssignee(Base):
     status_changed_at = Column(DateTime(timezone=True), default=_utcnow)
     # When the work was handed in ("На проверке" or "Готово"): on time or late against due_at
     completed_at = Column(DateTime(timezone=True), nullable=True)
+    # Off the board: a "Готово" card goes to the archive a week after it got there, or when its owner moves it
+    archived_at = Column(DateTime(timezone=True), nullable=True)
 
     task = relationship("Task", back_populates="assignees")
     user = relationship("User")

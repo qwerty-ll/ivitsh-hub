@@ -8,7 +8,9 @@ import ScheduleWidget from '../components/ScheduleWidget';
 import { TodayCard, MyTasksCard } from '../components/DashboardToday';
 import SectionIcon from '../components/SectionIcon';
 import { SECTIONS } from '../data/sections';
-import { calendarApi, contentApi, eventsApi, tasksApi } from '../services/api';
+import { calendarApi, contentApi, eventsApi, progressApi, tasksApi } from '../services/api';
+import { ProgressMini, TIERS } from '../components/Progress';
+import { useToast } from '../context/ToastContext';
 import { openChat } from '../utils/chat';
 import { markStep, readSteps, ONBOARDING_EVENT } from '../utils/onboarding';
 import { subgroupOf, cleanLessonTitle } from '../utils/lessons';
@@ -179,6 +181,8 @@ const Dashboard = () => {
   // --- Signed in: the coming week from the calendar (lessons, meetings, deadlines) and open tasks ---
   const [calendar, setCalendar] = useState(null);
   const [toRate, setToRate] = useState([]);
+  const [progress, setProgress] = useState(null);
+  const toast = useToast();
   const [myCards, setMyCards] = useState(null);
   useEffect(() => {
     if (!isLoggedIn) { setCalendar(null); setMyCards(null); return; }
@@ -187,6 +191,19 @@ const Dashboard = () => {
       .catch(() => setCalendar({ items: [], lessons: 'unavailable' }));
     tasksApi.my().then(res => setMyCards(res || [])).catch(() => setMyCards([]));
     eventsApi.pendingFeedback().then(res => setToRate(res || [])).catch(() => setToRate([]));
+    progressApi.get().then((p) => {
+      setProgress(p);
+      // A badge earned since the last visit gets a moment of its own
+      const key = `portal_badges_${user?.id}`;
+      let seen = null;
+      try { seen = JSON.parse(localStorage.getItem(key)); } catch { /* nothing saved */ }
+      const levels = Object.fromEntries(p.badges.map(b => [b.id, b.level]));
+      if (seen) {
+        const fresh = p.badges.filter(b => b.level > (seen[b.id] || 0));
+        fresh.slice(0, 2).forEach(b => toast.show(`Новое достижение: «${b.title}», ${TIERS[b.level].label.toLowerCase()}`, 'success', 5000));
+      }
+      try { localStorage.setItem(key, JSON.stringify(levels)); } catch { /* private mode */ }
+    }).catch(() => setProgress(null));
   }, [isLoggedIn]);
   const subgroup = readSubgroup();
   const calendarItems = (calendar?.items || []).filter(i => fitsSubgroup(i, subgroup));
@@ -342,7 +359,7 @@ const Dashboard = () => {
             return (
               <li key={id}>
                 <Link to={path} className="dash-shortcut" onClick={() => markTaskDone(id)}>
-                  <SectionIcon section={id} quiet />
+                  <SectionIcon section={id} />
                   <span className="dash-shortcut-text">
                     <span className="dash-shortcut-label">{label}</span>
                     <span className="dash-shortcut-hint">{hint}</span>
@@ -367,6 +384,7 @@ const Dashboard = () => {
 
         <div className="dash-aside">
           {isLoggedIn && <MyTasksCard cards={myCards} />}
+          {isLoggedIn && progress && <ProgressMini data={progress} />}
 
           {/* The survey after an event the student took part in */}
           {toRate.length > 0 && (
@@ -387,7 +405,7 @@ const Dashboard = () => {
 
           {/* ANNOUNCEMENTS: hidden until there are any */}
           {announcements.length > 0 && (
-          <section id="announcements-section" className="card dash-card" aria-labelledby="announcements-title">
+          <section id="announcements-section" className="card dash-card hue-blue" aria-labelledby="announcements-title">
             <div className="dash-card-head">
               <h2 id="announcements-title">Объявления</h2>
               {announcements.length > 0 && <span className="dash-card-meta tabular">{announcements.length}</span>}

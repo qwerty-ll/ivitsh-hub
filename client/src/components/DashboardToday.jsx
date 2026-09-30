@@ -38,7 +38,7 @@ export const TodayCard = ({ items, status }) => {
   };
 
   return (
-    <section className="card dash-card dash-today" aria-labelledby="today-title">
+    <section className="card dash-card dash-today hue-orange" aria-labelledby="today-title">
       <div className="dash-card-head">
         <h2 id="today-title">{title}</h2>
         <Link to="/calendar" className="dash-card-link">Календарь<ArrowRight size={16} {...ICON} /></Link>
@@ -89,7 +89,7 @@ export const MyTasksCard = ({ cards }) => {
   const open = (cards || []).filter(c => OPEN.includes(c.my_status));
   const review = (cards || []).filter(c => c.my_status === 'review').length;
   return (
-    <section className="card dash-card dash-mytasks" aria-labelledby="mytasks-title">
+    <section className="card dash-card dash-mytasks hue-teal" aria-labelledby="mytasks-title">
       <div className="dash-card-head">
         <h2 id="mytasks-title">Мои задачи</h2>
         <Link to="/tasks" className="dash-card-link">Все<ArrowRight size={16} {...ICON} /></Link>

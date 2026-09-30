@@ -1,10 +1,11 @@
 // Shared bits of the tasks board, a task's page and the task form.
 
+// Each status has its own color, so the columns are told apart at a glance
 export const STATUSES = [
-  { id: 'todo', label: 'К выполнению' },
-  { id: 'in_progress', label: 'В работе' },
-  { id: 'review', label: 'На проверке' },
-  { id: 'done', label: 'Готово' },
+  { id: 'todo', label: 'К выполнению', hue: 'slate' },
+  { id: 'in_progress', label: 'В работе', hue: 'blue' },
+  { id: 'review', label: 'На проверке', hue: 'amber' },
+  { id: 'done', label: 'Готово', hue: 'green' },
 ];
 export const STATUS_LABEL = Object.fromEntries(STATUSES.map(s => [s.id, s.label]));
 

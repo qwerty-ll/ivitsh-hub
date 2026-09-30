@@ -28,7 +28,7 @@ export const ProfileAssociations = () => {
         {achievements.map(r => (
           <li key={r.association_id}>
             <Link to={`/associations/${r.association_id}`} className="list-row profile-assoc-row">
-              <span className="tile tile-quiet" aria-hidden="true"><Award size={20} {...ICON} /></span>
+              <span className="tile hue-amber" aria-hidden="true"><Award size={20} {...ICON} /></span>
               <span className="profile-stat-text">
                 <span className="profile-stat-label">
                   {r.role === 'leader' ? 'Руководитель объединения' : 'Участник объединения'} «{r.association_name}»
@@ -41,7 +41,7 @@ export const ProfileAssociations = () => {
         {pending.map(r => (
           <li key={r.association_id}>
             <Link to={`/associations/${r.association_id}`} className="list-row profile-assoc-row">
-              <span className="tile tile-quiet" aria-hidden="true"><Clock size={20} {...ICON} /></span>
+              <span className="tile hue-slate" aria-hidden="true"><Clock size={20} {...ICON} /></span>
               <span className="profile-stat-text">
                 <span className="profile-stat-label">{r.association_name}</span>
                 <span className="profile-stat-meta">Заявка на рассмотрении у руководителя</span>
@@ -52,7 +52,7 @@ export const ProfileAssociations = () => {
         ))}
         {achievements.length + pending.length === 0 ? (
           <li className="list-row profile-assoc-row">
-            <SectionIcon section="associations" quiet />
+            <SectionIcon section="associations" />
             <span className="profile-stat-text">
               <span className="profile-stat-label">Вы пока не состоите в объединениях</span>
               <span className="profile-stat-meta">
