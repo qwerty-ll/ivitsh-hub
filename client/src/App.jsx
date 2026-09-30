@@ -11,7 +11,6 @@ import CookieNotice from './components/CookieNotice';
 
 // Lazy Loaded Pages for Optimal Bundle Splitting
 const Dashboard = lazy(() => import('./pages/Dashboard'));
-const FreshmanGuide = lazy(() => import('./pages/FreshmanGuide'));
 const Forum = lazy(() => import('./pages/Forum'));
 const QuestionDetail = lazy(() => import('./pages/QuestionDetail'));
 const CampusMap = lazy(() => import('./pages/CampusMap'));
@@ -30,7 +29,6 @@ const PageLoader = () => (
   </div>
 );
 
-import { scheduleDailyActivityReminder } from './utils/notifications';
 import { markStep, ROUTE_STEPS } from './utils/onboarding';
 import { useAuth } from './context/AuthContext';
 
@@ -40,10 +38,9 @@ function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Scroll to top on route change & initialize daily notifications
+  // Scroll to top on route change
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
-    scheduleDailyActivityReminder();
   }, [location.pathname]);
 
   // Opening a section counts towards the dashboard checklist, however the user got there
@@ -78,7 +75,7 @@ function App() {
         </button>
         <Link to="/" className="mobile-bar-brand">
           <img src="/img/mascot-160.png" alt="" className="mobile-bar-mark" />
-          <span className="mobile-bar-title">Портал ИВИТШ</span>
+          <span className="mobile-bar-title">ИВИТШ Хаб</span>
         </Link>
       </header>
 
@@ -97,7 +94,6 @@ function App() {
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/guide" element={<FreshmanGuide />} />
             <Route path="/forum" element={<Forum />} />
             <Route path="/forum/question/:id" element={<QuestionDetail />} />
             <Route path="/map" element={<CampusMap />} />
@@ -109,7 +105,7 @@ function App() {
           </Routes>
         </Suspense>
         <footer className="app-footer">
-          <span>Портал ИВИТШ КГУ</span>
+          <span>ИВИТШ Хаб · КГУ</span>
           <Link to="/privacy">Конфиденциальность и cookie</Link>
         </footer>
       </main>

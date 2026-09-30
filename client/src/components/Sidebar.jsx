@@ -31,7 +31,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen })
           <img src="/img/mascot-160.png" alt="" />
         </span>
         <span className="sidebar-brand-text">
-          <span className="sidebar-brand-name">Портал ИВИТШ</span>
+          <span className="sidebar-brand-name">ИВИТШ Хаб</span>
           <span className="sidebar-brand-sub">КГУ · Высшая IT-школа</span>
         </span>
       </NavLink>

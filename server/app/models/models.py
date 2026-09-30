@@ -36,7 +36,6 @@ class User(Base):
     questions = relationship("ForumQuestion", back_populates="author", cascade="all, delete-orphan")
     answers = relationship("ForumAnswer", back_populates="author", cascade="all, delete-orphan")
     votes = relationship("Vote", back_populates="user", cascade="all, delete-orphan")
-    adaptation = relationship("UserAdaptation", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 
 class ForumQuestion(Base):
@@ -147,14 +146,3 @@ class RevokedToken(Base):
     id = Column(Integer, primary_key=True, index=True)
     jti = Column(String, unique=True, index=True, nullable=False)
     revoked_at = Column(DateTime(timezone=True), default=_utcnow)
-
-
-class UserAdaptation(Base):
-    __tablename__ = "user_adaptations"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
-    completed_steps = Column(String, default="[0]")
-    last_updated = Column(DateTime(timezone=True), default=_utcnow)
-
-    user = relationship("User", back_populates="adaptation")

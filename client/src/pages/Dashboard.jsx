@@ -7,15 +7,13 @@ import { useAuth } from '../context/AuthContext';
 import ScheduleWidget from '../components/ScheduleWidget';
 import SectionIcon from '../components/SectionIcon';
 import { SECTIONS } from '../data/sections';
-import { contentApi, adaptationApi } from '../services/api';
+import { contentApi } from '../services/api';
 import { openChat } from '../utils/chat';
 import { markStep, readSteps, ONBOARDING_EVENT } from '../utils/onboarding';
 import { subgroupOf, cleanLessonTitle } from '../utils/lessons';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 
-const ROADMAP_STEPS = 9;
-// The guide has its own button in the hero, so it is not repeated here.
 const SHORTCUTS = ['forum', 'map', 'teachers', 'faq'];
 
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -175,28 +173,6 @@ const Dashboard = () => {
     }).catch(e => console.warn('Failed to load DB announcements on Dashboard:', e));
   }, []);
 
-  // --- Adaptation progress for the hero button (server progress merged with this device) ---
-  const [roadmapDone, setRoadmapDone] = useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('freshman_roadmap_completed') || '[]');
-      return Array.isArray(saved) ? saved.length : 0;
-    } catch { return 0; }
-  });
-
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    adaptationApi.getMyProgress().then(res => {
-      if (res && Array.isArray(res.completed_steps)) {
-        try {
-          const local = JSON.parse(localStorage.getItem('freshman_roadmap_completed') || '[]');
-          setRoadmapDone(new Set([...local, ...res.completed_steps]).size);
-        } catch {
-          setRoadmapDone(res.completed_steps.length);
-        }
-      }
-    }).catch(() => {});
-  }, [isLoggedIn, user?.id]);
-
   // --- Today's lessons, reported by the schedule widget ---
   const [groupLessons, setGroupLessons] = useState(null);
   const ownGroup = user?.group ? { id: user.groupId || null, name: user.group } : null;
@@ -278,7 +254,6 @@ const Dashboard = () => {
   const dateLead = todayLabel.charAt(0).toUpperCase() + todayLabel.slice(1);
   // A group name like "24-ИСбо-1" must not break at its hyphens
   const whose = todaySummary?.group ? <>У группы <span className="dash-hero-group">{todaySummary.group}</span></> : 'У вас';
-  const roadmapLeft = Math.max(0, ROADMAP_STEPS - roadmapDone);
 
   return (
     <div className="container dash">
@@ -286,13 +261,13 @@ const Dashboard = () => {
       <section className="dash-hero" aria-labelledby="dash-hello">
         <div className="dash-hero-text">
           <h1 id="dash-hello">
-            {firstName ? `Привет, ${firstName}!` : isLoggedIn ? 'Добро пожаловать!' : 'Добро пожаловать на портал ИВИТШ'}
+            {firstName ? `Привет, ${firstName}!` : isLoggedIn ? 'Добро пожаловать!' : 'Добро пожаловать в ИВИТШ Хаб'}
           </h1>
           <div className="dash-hero-today">
             {!isLoggedIn ? (
-              <p className="dash-hero-lead">{dateLead}. Войдите через ЭИОС: портал запомнит ваш путь адаптации, вопросы на форуме и прогресс.</p>
+              <p className="dash-hero-lead">{dateLead}. Войдите через ЭИОС: портал покажет расписание вашей группы и запомнит ваши вопросы на форуме.</p>
             ) : !todaySummary ? (
-              <p className="dash-hero-lead">{dateLead}. Здесь расписание, объявления и путь первокурсника — всё в одном месте.</p>
+              <p className="dash-hero-lead">{dateLead}. Здесь расписание, объявления и помощник ВИТШик — всё в одном месте.</p>
             ) : (
               <>
                 <p className="dash-hero-lead">
@@ -311,19 +286,13 @@ const Dashboard = () => {
             <p className="visually-hidden" aria-live="polite">{heroStatus(todaySummary)}</p>
           </div>
           <div className="dash-hero-actions">
-            {isLoggedIn ? (
-              <Link to="/guide" className="btn btn-primary">
-                {roadmapLeft === 0 ? 'Путь пройден — смотреть награды' : roadmapDone === 0 ? 'Начать путь первокурсника' : 'Продолжить путь'}
-                {roadmapLeft > 0 && roadmapDone > 0 && <span className="dash-hero-count tabular">{roadmapDone} из {ROADMAP_STEPS}</span>}
-                <ArrowRight size={16} {...ICON} />
-              </Link>
-            ) : (
+            {!isLoggedIn && (
               <Link to="/profile" className="btn btn-primary">
                 <LogIn size={16} {...ICON} />
                 Войти через ЭИОС
               </Link>
             )}
-            <button type="button" className="btn btn-secondary" onClick={openChat}>
+            <button type="button" className={`btn ${isLoggedIn ? 'btn-primary' : 'btn-secondary'}`} onClick={openChat}>
               <MessageCircle size={16} {...ICON} />
               Спросить ВИТШика
             </button>

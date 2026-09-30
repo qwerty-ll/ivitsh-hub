@@ -241,7 +241,7 @@ def test_small_talk_and_what_the_cat_can_do(student, monkeypatch):
 
 def test_questions_about_the_portal_get_its_sections(client, fake_timetable):
     reply, actions = ask(client, "как задать вопрос на форуме")
-    assert reply.startswith("Что есть на портале ИВИТШ") and actions == [("Форум", "/forum")]
+    assert reply.startswith("Что есть в ИВИТШ Хабе") and actions == [("Форум", "/forum")]
     assert ask(client, "как установить портал на телефон")[1] == [("Личный кабинет", "/profile")]
     assert "с 9:00 до 17:00" in ask(client, "часы работы деканата")[0]
 

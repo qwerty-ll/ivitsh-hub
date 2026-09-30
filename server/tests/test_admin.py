@@ -7,13 +7,12 @@ def _user_id(db, username):
     return db.query(models.User).filter_by(username=username).one().id
 
 
-def test_delete_user_with_adaptation_progress(app, fake_eios, db):
-    student = login_student(app, fake_eios)
-    assert student.post("/api/v1/adaptation", json={"completed_steps": [0, 1, 2]}, headers=CSRF).status_code == 200
+def test_delete_user(app, fake_eios, db):
+    login_student(app, fake_eios)
     admin = login_admin(app)
     r = admin.delete(f"/api/v1/admin/users/{_user_id(db, '24-isbo-001')}", headers=CSRF)
     assert r.status_code == 200
-    assert db.query(models.UserAdaptation).count() == 0
+    assert db.query(models.User).filter_by(username="24-isbo-001").count() == 0
 
 
 def test_block_user_ends_session_and_prevents_login(app, fake_eios, db):
@@ -38,21 +37,11 @@ def test_main_admin_is_protected(app, fake_eios, db):
     assert admin.patch(f"/api/v1/admin/users/{student_id}/role", json={"role": "superuser"}, headers=CSRF).status_code == 422
 
 
-def test_adaptation_validation(app, fake_eios):
-    c = login_student(app, fake_eios)
-    assert c.post("/api/v1/adaptation", json={"completed_steps": [0, 9]}, headers=CSRF).status_code == 422
-    r = c.post("/api/v1/adaptation", json={"completed_steps": [1, 1, 1, 0, 8]}, headers=CSRF)
-    assert r.status_code == 200
-    assert r.json()["completed_steps"] == [0, 1, 8]
-    assert r.json()["progress_percent"] == 33.3
-
-
-def test_admin_adaptations_is_admin_only(app, fake_eios, db):
+def test_freshman_guide_api_is_gone(app, fake_eios):
     student = login_student(app, fake_eios)
+    assert student.get("/api/v1/adaptation/me").status_code == 404
     admin = login_admin(app)
-    admin.patch(f"/api/v1/admin/users/{_user_id(db, '24-isbo-001')}/role", json={"role": "moderator"}, headers=CSRF)
-    assert student.get("/api/v1/admin/adaptations").status_code == 403
-    assert len(admin.get("/api/v1/admin/adaptations").json()) == 2
+    assert admin.get("/api/v1/admin/adaptations").status_code == 404
 
 
 def test_seed_keeps_teachers_added_by_admin(app, db):

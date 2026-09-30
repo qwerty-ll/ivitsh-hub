@@ -169,13 +169,6 @@ export const forumApi = {
     apiFetch(`/api/v1/forum/answers/${answerId}/solution`, { method: 'POST' }),
 };
 
-export const adaptationApi = {
-  saveProgress: (completedSteps) =>
-    apiFetch('/api/v1/adaptation', json('POST', { completed_steps: completedSteps })),
-  getMyProgress: () =>
-    apiFetch('/api/v1/adaptation/me'),
-};
-
 // Admin Services
 export const adminApi = {
   // Users
@@ -187,8 +180,6 @@ export const adminApi = {
     apiFetch(`/api/v1/admin/users/${userId}/block`, json('PATCH', { blocked })),
   deleteUser: (userId) =>
     apiFetch(`/api/v1/admin/users/${userId}`, { method: 'DELETE' }),
-  getAdaptations: () =>
-    apiFetch('/api/v1/admin/adaptations'),
 
   // Teachers
   getTeachers: () => apiFetch('/api/v1/teachers'),

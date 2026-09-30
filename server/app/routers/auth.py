@@ -24,7 +24,7 @@ _LOGIN_LOOKS_LIKE_RAW_ID = re.compile(r"^\d{2}-[a-zа-я]+-\d+", re.IGNORECASE)
 _INVALID_CREDENTIALS = "Неверный логин или пароль ЭИОС КГУ. Проверьте данные и попробуйте снова."
 _INVALID_ADMIN_CREDENTIALS = "Неверный логин или пароль Администратора ИВИТШ"
 # Edition of the consent text on /privacy#consent (client/src/pages/Privacy.jsx, EDITION): change both together
-PD_CONSENT_VERSION = "2026-09-29"
+PD_CONSENT_VERSION = "2026-09-30"
 
 
 def _find_user(db: Session, username: str) -> Optional[models.User]:

@@ -307,31 +307,6 @@
 }
 .admin-role-fixed svg { color: var(--text-3); }
 
-/* Adaptation: progress column */
-.admin-cell-progress { width: 40%; }
-.admin-progress {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-width: 18rem;
-}
-.admin-progress .progress {
-  flex: 1 1 auto;
-  min-width: 6rem;
-}
-.admin-progress-complete { background: var(--success); }
-.admin-progress-pct {
-  min-width: 2.75rem;
-  color: var(--text);
-  font-weight: var(--weight-medium);
-  text-align: right;
-}
-.admin-progress-steps {
-  color: var(--text-2);
-  font-size: var(--text-sm);
-  white-space: nowrap;
-}
-
 /* ---------- States: empty, loading, error ---------- */
 .admin-empty {
   padding: var(--space-10) var(--space-6);
@@ -461,8 +436,7 @@
     font-size: var(--text-base); /* 16px keeps iOS from zooming on focus */
   }
 
-  .admin-table td.admin-cell-controls,
-  .admin-table td.admin-cell-progress {
+  .admin-table td.admin-cell-controls {
     order: 3;
     flex-basis: 100%;
     width: auto;
@@ -473,10 +447,6 @@
   .admin-controls .btn {
     flex: 1 1 0;
     min-height: var(--touch-target);
-  }
-  .admin-progress {
-    min-width: 0;
-    padding-top: var(--space-1);
   }
 
   .admin-empty { padding: var(--space-8) var(--space-4); }

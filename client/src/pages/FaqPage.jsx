@@ -79,7 +79,7 @@ const FaqPage = () => {
           <SectionIcon section="faq" size="lg" />
           <div>
             <h1>Частые вопросы</h1>
-            <p className="page-subtitle">Короткие ответы на то, что первокурсники спрашивают чаще всего.</p>
+            <p className="page-subtitle">Короткие ответы на то, что студенты спрашивают чаще всего.</p>
           </div>
         </div>
       </header>

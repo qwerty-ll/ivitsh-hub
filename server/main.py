@@ -13,7 +13,7 @@ from app.core import security
 from app.db.database import SessionLocal
 from app.db.migrate import run_migrations
 import app.models as models
-from app.routers import auth, forum, chat, schedule, documents, admin, adaptation, rooms
+from app.routers import auth, forum, chat, schedule, documents, admin, rooms
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,8 +58,8 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="Портал ИВИТШ КГУ API",
-    description="REST API портала и гайда адаптации первокурсников Высшей ИТ-Школы КГУ",
+    title="ИВИТШ Хаб API",
+    description="REST API ИВИТШ Хаба — единой площадки студентов Высшей ИТ-Школы КГУ",
     version="1.1.0",
     docs_url="/docs" if settings.DOCS_ENABLED else None,
     redoc_url="/redoc" if settings.DOCS_ENABLED else None,
@@ -107,7 +107,6 @@ app.include_router(chat.router)
 app.include_router(schedule.router)
 app.include_router(documents.router)
 app.include_router(admin.router)
-app.include_router(adaptation.router)
 app.include_router(rooms.router)
 
 

@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
-  GraduationCap, ShieldCheck, BadgeCheck, CheckCircle2,
+  GraduationCap, ShieldCheck, BadgeCheck,
   LogIn, LogOut, Camera, AlertCircle, Clock, Loader2, Eye, EyeOff, CalendarDays,
   Smartphone, Share
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { adaptationApi, forumApi } from '../services/api';
-import MiniGamesSection from '../components/MiniGamesSection';
+import { forumApi } from '../services/api';
 import { useInstallApp } from '../utils/install';
 import SectionIcon from '../components/SectionIcon';
 import { initialsOf, shrinkAvatar } from '../utils/avatar';
@@ -50,34 +49,11 @@ const Profile = () => {
   const [avatarLoadError, setAvatarLoadError] = useState(false);
   const app = useInstallApp();
 
-  // Load stats from localStorage and API
-  const [roadmapCompleted, setRoadmapCompleted] = useState(0);
-  const [totalRoadmapSteps] = useState(9);
+  // Activity stats from the API
   const [forumQuestionsCount, setForumQuestionsCount] = useState(0);
 
   useEffect(() => {
-    // Load roadmap progress from localStorage first
-    try {
-      const saved = localStorage.getItem('freshman_roadmap_completed');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) setRoadmapCompleted(parsed.length);
-      }
-    } catch (e) { console.error(e); }
-
     if (!user) return;
-
-    // Server progress is authoritative; merge with steps done offline on this device.
-    adaptationApi.getMyProgress().then(res => {
-      if (res && Array.isArray(res.completed_steps)) {
-        try {
-          const localSteps = JSON.parse(localStorage.getItem('freshman_roadmap_completed') || '[]');
-          setRoadmapCompleted(new Set([...localSteps, ...res.completed_steps]).size);
-        } catch {
-          setRoadmapCompleted(res.completed_steps.length);
-        }
-      }
-    }).catch(() => {});
 
     forumApi.getQuestions('', '', 200, 0, user.id)
       .then(res => setForumQuestionsCount(Array.isArray(res) ? res.length : 0))
@@ -186,13 +162,9 @@ const Profile = () => {
             <img src="/img/mascot-320.png" alt="" className="login-mascot" width="120" height="120" />
             <h1 id="login-page-title">Личный кабинет</h1>
             <p className="login-aside-lead">
-              Войдите, и портал запомнит вас: прогресс, вопросы и расписание будут под рукой.
+              Войдите, и портал запомнит вас: вопросы и расписание будут под рукой.
             </p>
             <ul className="login-perks">
-              <li>
-                <SectionIcon section="guide" size="sm" quiet />
-                <span>Путь первокурсника сохраняется на любом устройстве</span>
-              </li>
               <li>
                 <SectionIcon section="forum" size="sm" quiet />
                 <span>Вопросы и ответы на форуме от вашего имени</span>
@@ -352,8 +324,6 @@ const Profile = () => {
 
   // --- LOGGED IN: SHOW PROFILE ---
   const roleLabel = user.role === 'admin' ? 'Администратор' : user.role === 'moderator' ? 'Модератор' : 'Студент ИВИТШ';
-  const roadmapDone = roadmapCompleted >= totalRoadmapSteps;
-  const roadmapRatio = Math.min(1, Math.max(0, roadmapCompleted / totalRoadmapSteps));
 
   return (
     <div className="container profile-page">
@@ -430,37 +400,6 @@ const Profile = () => {
 
             <ul className="card list profile-stats">
               <li className="list-row profile-stat">
-                <SectionIcon section="guide" quiet />
-                <div className="profile-stat-body">
-                  <div className="profile-stat-head">
-                    <div className="profile-stat-text">
-                      <span className="profile-stat-label">Путь адаптации</span>
-                      <span className={`profile-stat-meta${roadmapDone ? ' is-done' : ''}`}>
-                        {roadmapDone ? (
-                          <><CheckCircle2 size={14} {...ICON} /> Все этапы пройдены</>
-                        ) : (
-                          'этапов пройдено'
-                        )}
-                      </span>
-                    </div>
-                    <span className="profile-stat-value tabular">
-                      {roadmapCompleted} <span className="profile-stat-unit">из {totalRoadmapSteps}</span>
-                    </span>
-                  </div>
-                  <div
-                    className="progress"
-                    role="progressbar"
-                    aria-label="Пройдено этапов пути адаптации"
-                    aria-valuemin={0}
-                    aria-valuemax={totalRoadmapSteps}
-                    aria-valuenow={Math.min(roadmapCompleted, totalRoadmapSteps)}
-                  >
-                    <div className="progress-value" style={{ transform: `scaleX(${roadmapRatio})` }} />
-                  </div>
-                </div>
-              </li>
-
-              <li className="list-row profile-stat">
                 <SectionIcon section="forum" quiet />
                 <div className="profile-stat-body">
                   <div className="profile-stat-head">
@@ -504,9 +443,6 @@ const Profile = () => {
               </li>
             </ul>
           </section>
-
-          {/* ADAPTATION MINI-GAMES */}
-          <MiniGamesSection />
         </div>
       </div>
     </div>

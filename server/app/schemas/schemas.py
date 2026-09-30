@@ -208,29 +208,3 @@ class RetakeIn(DocumentPerson):
     control: Literal["экзамен", "зачёт", "дифференцированный зачёт"]
     teacher: str = Field("", max_length=100)
     reason: str = Field(..., min_length=3, max_length=300)
-
-
-ADAPTATION_TOTAL_STEPS = 9
-
-
-class UserAdaptationUpdate(BaseModel):
-    completed_steps: List[int] = Field(..., max_length=ADAPTATION_TOTAL_STEPS * 2)
-
-    @field_validator("completed_steps")
-    @classmethod
-    def validate_steps(cls, v: List[int]) -> List[int]:
-        if any(step < 0 or step >= ADAPTATION_TOTAL_STEPS for step in v):
-            raise ValueError(f"Номер шага должен быть от 0 до {ADAPTATION_TOTAL_STEPS - 1}")
-        return sorted(set(v))
-
-
-class UserAdaptationResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    user_id: int
-    username: str
-    full_name: str
-    group_number: Optional[str] = None
-    completed_steps: List[int]
-    progress_percent: float
-    last_updated: Optional[datetime] = None

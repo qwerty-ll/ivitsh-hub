@@ -1,6 +1,6 @@
 # 📘 Руководство по развертыванию
 
-**Проект:** портал и гид первокурсника Высшей ИТ-школы КГУ
+**Проект:** ИВИТШ Хаб — единая площадка студентов Высшей ИТ-школы КГУ
 **Архитектура:** React (Vite SPA) + FastAPI + PostgreSQL + Nginx (HTTPS)
 **Домен:** `ivitsh-portal.kosgos.ru`
 **Способ развертывания:** Docker Compose (`db`, `backend`, `client`)
@@ -36,8 +36,8 @@ Nginx отдаёт SPA и проксирует `/api/` на backend. Swagger (`/
 
 ### Шаг 1. Клонирование
 ```bash
-git clone https://github.com/qwerty-ll/CombinedPortal.git
-cd CombinedPortal
+git clone https://github.com/qwerty-ll/ivitsh-hub.git
+cd ivitsh-hub
 ```
 
 ### Шаг 2. Файл окружения

@@ -443,19 +443,6 @@ const AdminPanel = () => {
     });
   }, [isAdmin]);
 
-  // --- ADAPTATIONS ---
-  const [adaptationsList, setAdaptationsList] = useState([]);
-  const [adaptationsError, setAdaptationsError] = useState('');
-  const loadAdaptations = useCallback(() => {
-    adminApi.getAdaptations()
-      .then(res => { setAdaptationsError(''); if (Array.isArray(res)) setAdaptationsList(res); })
-      .catch(e => { setAdaptationsError(e.message || 'Не удалось загрузить прогресс адаптации'); setAdaptationsList([]); });
-  }, []);
-
-  useEffect(() => {
-    if (isAdmin) loadAdaptations();
-  }, [isAdmin, loadAdaptations]);
-
   const handleDeleteForumQuestion = (id) => {
     // Forum delete via API not implemented yet — show informative message
     toast.show('Удаление тем форума через API в разработке. Используйте БД напрямую.', 'info');
@@ -470,7 +457,6 @@ const AdminPanel = () => {
     { id: 'faq', label: 'FAQ', count: faqItems.length },
     { id: 'forum', label: 'Модерация форума', count: forumQuestions.length },
     { id: 'users', label: 'Пользователи', count: usersList.length },
-    { id: 'adaptations', label: 'Адаптация студентов', count: adaptationsList.length },
   ];
 
   // WAI-ARIA tabs: arrows / Home / End move between tabs, Tab moves into the panel
@@ -733,7 +719,7 @@ const AdminPanel = () => {
           <div className="card admin-editor">
             <div className="admin-editor-head">
               <h3>{editingSubjectId ? 'Редактировать дисциплину' : 'Добавить новую дисциплину'}</h3>
-              <p>Дисциплины показываются в «Пути первокурсника» по семестрам.</p>
+              <p>Справочник дисциплин учебного плана по семестрам.</p>
             </div>
             <form onSubmit={handleAddSubject} className="admin-form">
               <div className="admin-grid admin-grid-3">
@@ -1050,72 +1036,6 @@ const AdminPanel = () => {
         </section>
       )}
 
-      {/* ADAPTATIONS TAB */}
-      {activeTab === 'adaptations' && (
-        <section {...panelProps('adaptations')}>
-          <Toolbar
-            title="Прогресс адаптации первокурсников"
-            description="Отслеживайте прохождение 9 этапов адаптации студентами ИВИТШ КГУ."
-          >
-            <RefreshButton onClick={loadAdaptations} />
-          </Toolbar>
-
-          <div className="admin-list">
-            {adaptationsError ? (
-              <LoadError message={adaptationsError} onRetry={loadAdaptations} />
-            ) : adaptationsList.length === 0 ? (
-              <p className="admin-empty">Нет данных по адаптации студентов. Прогресс появится, когда студенты начнут проходить этапы.</p>
-            ) : (
-              <table className="admin-table">
-                <caption className="visually-hidden">Прогресс адаптации по студентам</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Студент</th>
-                    <th scope="col">Группа</th>
-                    <th scope="col">Прогресс</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {adaptationsList.map(a => {
-                    const percent = Math.max(0, Math.min(100, Math.round(Number(a.progress_percent) || 0)));
-                    const done = a.completed_steps.length;
-                    return (
-                      <tr key={a.user_id}>
-                        <td className="admin-cell-main">
-                          <span className="admin-cell-title">{a.full_name || a.username}</span>
-                          <p className="admin-cell-sub">Логин: {a.username}</p>
-                        </td>
-                        <td className={`admin-cell-meta${a.group_number ? '' : ' admin-cell-muted'}`} data-label="Группа">
-                          {a.group_number || 'Не указана'}
-                        </td>
-                        <td className="admin-cell-progress">
-                          <div className="admin-progress">
-                            <div
-                              className="progress"
-                              role="progressbar"
-                              aria-valuemin={0}
-                              aria-valuemax={100}
-                              aria-valuenow={percent}
-                              aria-label={`Адаптация: ${a.full_name || a.username}`}
-                            >
-                              <div
-                                className={`progress-value${percent >= 100 ? ' admin-progress-complete' : ''}`}
-                                style={{ transform: `scaleX(${percent / 100})` }}
-                              />
-                            </div>
-                            <span className="admin-progress-pct tabular">{percent}%</span>
-                            <span className="admin-progress-steps tabular">{done} из 9 этапов</span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
-      )}
     </div>
   );
 };

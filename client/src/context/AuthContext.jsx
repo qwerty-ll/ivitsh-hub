@@ -5,9 +5,13 @@ const AuthContext = createContext(null);
 const AUTH_STORAGE_KEY = 'portal_auth_user';
 
 // Per-user data kept in the browser; removed on logout so the next person on a shared computer starts clean.
-const USER_SCOPED_KEYS = [AUTH_STORAGE_KEY, 'freshman_roadmap_completed', 'onboarding_completed_tasks', 'portal_group_number', 'portal_sched_group'];
+const USER_SCOPED_KEYS = [AUTH_STORAGE_KEY, 'onboarding_completed_tasks', 'portal_group_number', 'portal_sched_group'];
 // Left behind by older versions of the portal (JWT in localStorage, cached personal/admin responses).
-const LEGACY_KEYS = ['portal_jwt_token', 'portal_faq', 'portal_announcements', 'forum_questions'];
+const LEGACY_KEYS = [
+  'portal_jwt_token', 'portal_faq', 'portal_announcements', 'forum_questions',
+  // the removed freshman guide, its mini-games and daily reminder
+  'freshman_roadmap_completed', 'vitshik_coins_count', 'vitshik_pets_count', 'ivitsh_last_daily_notif',
+];
 
 const safeRemove = (key) => {
   try { localStorage.removeItem(key); } catch { /* storage unavailable */ }
@@ -82,7 +86,7 @@ export const AuthProvider = ({ children }) => {
   const [sessionExpired, setSessionExpired] = useState(false);
 
   // Signs out locally. Per-user data is only wiped when someone was actually signed in,
-  // so a guest's offline guide progress survives the 401s that guests always get.
+  // so a guest's onboarding progress survives the 401s that guests always get.
   const resetSession = useCallback(() => {
     let hadUser = false;
     try { hadUser = !!localStorage.getItem(AUTH_STORAGE_KEY); } catch { /* ignore */ }

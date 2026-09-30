@@ -342,7 +342,7 @@
   font-size: var(--text-sm);
 }
 
-/* ---------- The plan in the chat and in the freshman guide ---------- */
+/* ---------- The plan in the chat ---------- */
 
 .chat-plan {
   display: block;
@@ -357,15 +357,6 @@
 @media (hover: hover) {
   .chat-plan:hover { border-color: var(--accent); }
 }
-
-.guide-plan {
-  margin-top: var(--space-4);
-  overflow-x: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-.guide-plan .plan { min-width: 640px; padding: var(--space-2); }
 
 @media (max-width: 900px) {
   .map-details { grid-template-columns: minmax(0, 1fr); }
