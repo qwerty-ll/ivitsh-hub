@@ -8,6 +8,8 @@ _DB_DIR = tempfile.mkdtemp(prefix="portal-tests-")
 os.environ.update({
     "SECRET_KEY": "test-secret-key-that-is-long-enough-1234567890",
     "DATABASE_URL": f"sqlite:///{_DB_DIR}/test.db",
+    "UPLOAD_DIR": f"{_DB_DIR}/uploads",
+    "MAX_UPLOAD_MB": "1",
     "ADMIN_USERNAME": "portal_admin",
     "ADMIN_PASSWORD": "Adm1n-Test-Password!",
     "COOKIE_SECURE": "false",

@@ -26,6 +26,9 @@ __pycache__/
 *.sqlite3
 backend/portal.db*
 server/portal.db*
+# Files attached to tasks and announcements (UPLOAD_DIR)
+uploads/
+server/uploads/
 backend_data/
 server_data/
 sqlite_data/

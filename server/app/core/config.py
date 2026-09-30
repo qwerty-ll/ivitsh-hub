@@ -71,6 +71,10 @@ class Settings:
         name = (os.getenv("DOCUMENT_ADDRESSEE_NAME") or "А. С. Борисову").strip()
         self.DOCUMENT_ADDRESSEE_NAME = "" if name == "-" else name
 
+        # Files attached to tasks and announcements: kept on disk here (a Docker volume), never in git
+        self.UPLOAD_DIR = os.path.abspath(os.getenv("UPLOAD_DIR", "").strip() or "uploads")
+        self.MAX_UPLOAD_MB = max(1, _int("MAX_UPLOAD_MB", 10))
+
     @property
     def admin_username_normalized(self) -> str:
         return self.ADMIN_USERNAME.lower()

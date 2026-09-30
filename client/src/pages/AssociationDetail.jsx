@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Users, LogIn, Check, X, UserMinus, Clock, Info, RotateCw, Loader2
+  ArrowLeft, Users, LogIn, Check, X, UserMinus, Clock, Info, RotateCw, Loader2, Plus
 } from 'lucide-react';
+import AssociationPosts from '../components/AssociationPosts';
 import ContactLinks from '../components/ContactLinks';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -208,6 +209,11 @@ const AssociationDetail = () => {
               )}
             </section>
           )}
+
+          {/* ANNOUNCEMENTS: for members and leaders */}
+          {(isMember || data.can_manage) && (
+            <AssociationPosts associationId={data.id} canManage={data.can_manage} members={data.members} />
+          )}
         </div>
 
         <aside className="assoc-aside">
@@ -219,8 +225,14 @@ const AssociationDetail = () => {
                 <p className="assoc-muted">Заявки принимаются от студентов, вошедших через ЭИОС.</p>
                 <Link to="/profile" className="btn btn-primary"><LogIn size={16} {...ICON} />Войти через ЭИОС</Link>
               </>
-            ) : isLeader ? (
-              <p className="assoc-muted">Заявки и список участников — в разделе «Управление».</p>
+            ) : isLeader || data.can_manage ? (
+              <>
+                <p className="assoc-muted">Заявки и участники — в «Управлении», задачи — в разделе «Задачи».</p>
+                <div className="assoc-leader-actions">
+                  <Link to={`/tasks?new=1&association=${data.id}`} className="btn btn-primary"><Plus size={16} {...ICON} />Поставить задачу</Link>
+                  <Link to={`/tasks?tab=managed&association=${data.id}`} className="btn btn-secondary">Задачи объединения</Link>
+                </div>
+              </>
             ) : isMember ? (
               <>
                 <p className="assoc-muted">Руководитель видит вас в списке участников и может написать по вашим контактам из профиля.</p>

@@ -1,11 +1,11 @@
 # The whole portal in one container — the quickest way to run it:
 #   docker compose up --build        then open http://localhost:8080
 #
-# Students sign in with their EIOS account. For the admin panel ("Сотрудник ИВИТШ") put
+# Students sign in with their EIOS account. For the admin panel ("Администратор") put
 # ADMIN_USERNAME and ADMIN_PASSWORD into a .env file next to this one (see .env.example).
 # The same .env takes GIGACHAT_AUTH_KEY for the assistant; check it with
 #   docker compose exec portal python -m app.services.gigachat_check
-# Data lives in the "portal_data" volume; `docker compose down -v` deletes it.
+# Data (database and attached files) lives in the "portal_data" volume; `docker compose down -v` deletes it.
 #
 # Production (PostgreSQL, HTTPS, separate services) is infrastructure/docker-compose.yml.
 services:

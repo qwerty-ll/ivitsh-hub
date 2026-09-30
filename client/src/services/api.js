@@ -341,3 +341,48 @@ export const associationsApi = {
   removeMember: (id, userId) =>
     apiFetch(`/api/v1/associations/${id}/members/${userId}`, { method: 'DELETE' }),
 };
+
+// Tasks: my board, the ones I set as a leader, one task with its comments and files
+export const tasksApi = {
+  my: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.personal) q.set('personal', 'true');
+    if (params.associationId) q.set('association_id', params.associationId);
+    return apiFetch(`/api/v1/tasks/my${q.toString() ? `?${q}` : ''}`);
+  },
+  managed: (associationId) =>
+    apiFetch(`/api/v1/tasks/managed${associationId ? `?association_id=${associationId}` : ''}`),
+  get: (id) => apiFetch(`/api/v1/tasks/${id}`),
+  create: (data) => apiFetch('/api/v1/tasks', json('POST', data)),
+  edit: (id, data) => apiFetch(`/api/v1/tasks/${id}`, json('PUT', data)),
+  remove: (id) => apiFetch(`/api/v1/tasks/${id}`, { method: 'DELETE' }),
+  setStatus: (id, status, userId = null) =>
+    apiFetch(`/api/v1/tasks/${id}/status`, json('PATCH', userId ? { status, user_id: userId } : { status })),
+  removeAssignee: (id, userId) => apiFetch(`/api/v1/tasks/${id}/assignees/${userId}`, { method: 'DELETE' }),
+  comment: (id, text) => apiFetch(`/api/v1/tasks/${id}/comments`, json('POST', { text })),
+  deleteComment: (commentId) => apiFetch(`/api/v1/tasks/comments/${commentId}`, { method: 'DELETE' }),
+};
+
+// Association announcements
+export const postsApi = {
+  list: (associationId) => apiFetch(`/api/v1/associations/${associationId}/posts`),
+  create: (associationId, data) => apiFetch(`/api/v1/associations/${associationId}/posts`, json('POST', data)),
+  remove: (postId) => apiFetch(`/api/v1/associations/posts/${postId}`, { method: 'DELETE' }),
+};
+
+// Files and links on a task ('tasks') or an announcement ('associations/posts').
+// A file goes as the raw request body: no form encoding, the server checks type and size.
+export const attachmentsApi = {
+  upload: (owner, ownerId, file) =>
+    apiFetch(`/api/v1/${owner}/${ownerId}/files?name=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      body: file,
+      timeout: 120000,
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    }),
+  addLink: (owner, ownerId, url, title = '') =>
+    apiFetch(`/api/v1/${owner}/${ownerId}/links`, json('POST', { url, title })),
+  remove: (id) => apiFetch(`/api/v1/attachments/${id}`, { method: 'DELETE' }),
+  // Downloads are plain links: the session cookie goes along, the server checks the rights
+  href: (id) => `${API_BASE_URL}/api/v1/attachments/${id}`,
+};

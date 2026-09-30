@@ -129,6 +129,12 @@ docker compose -f infrastructure/docker-compose.yml up -d --build
   ```bash
   docker exec ivitsh_portal_db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > backup_$(date +%Y%m%d).sql
   ```
+- Файлы к задачам и объявлениям объединений лежат в томе `backend_data` (`/app/data/uploads` в контейнере,
+  переменная `UPLOAD_DIR`). Это персональные данные (распоряжения с ФИО): копируйте том вместе с базой.
+  ```bash
+  docker run --rm -v infrastructure_backend_data:/data -v "$PWD":/backup alpine tar czf /backup/uploads_$(date +%Y%m%d).tgz -C /data uploads
+  ```
+  Размер файла ограничен `MAX_UPLOAD_MB` (10 МБ); nginx пропускает до 11 МБ только на адреса загрузки.
 
 ---
 

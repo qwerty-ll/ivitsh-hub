@@ -29,6 +29,10 @@ services:
       - ../.env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-portal_user}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-portal_db}
+      # Attached files (orders, scripts, mock-ups): personal data, back this volume up with the database
+      UPLOAD_DIR: /app/data/uploads
+    volumes:
+      - backend_data:/app/data
     depends_on:
       db:
         condition: service_healthy
@@ -55,6 +59,7 @@ services:
 
 volumes:
   postgres_data:
+  backend_data:
 
 networks:
   portal_network:

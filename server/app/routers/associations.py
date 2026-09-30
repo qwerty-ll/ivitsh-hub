@@ -13,8 +13,31 @@ from app.db.database import get_db
 import app.models as models
 import app.schemas as schemas
 import app.core.security as security
+from app.services import uploads
 
 router = APIRouter(prefix="/api/v1", tags=["Associations"])
+
+
+# Stored file names on the tasks / posts matching a filter: collected before the rows are deleted
+# so the files can be removed from disk afterwards
+def task_files(db: Session, task_filter) -> List[str]:
+    rows = (
+        db.query(models.Attachment.stored_name)
+        .join(models.Task, models.Attachment.task_id == models.Task.id)
+        .filter(task_filter, models.Attachment.stored_name.isnot(None))
+        .all()
+    )
+    return [name for (name,) in rows]
+
+
+def post_files(db: Session, post_filter) -> List[str]:
+    rows = (
+        db.query(models.Attachment.stored_name)
+        .join(models.AssociationPost, models.Attachment.post_id == models.AssociationPost.id)
+        .filter(post_filter, models.Attachment.stored_name.isnot(None))
+        .all()
+    )
+    return [name for (name,) in rows]
 
 
 def catalog_order(association: models.Association):
@@ -372,10 +395,13 @@ def admin_delete(
     _: models.User = Depends(security.require_admin),
     db: Session = Depends(get_db),
 ):
-    """Deletes the association with all its memberships; hiding it (is_active) keeps the history."""
+    """Deletes the association with its members, tasks and posts; hiding it (is_active) keeps the history."""
     association = _get_association(db, association_id, include_inactive=True)
+    files = (task_files(db, models.Task.association_id == association_id)
+             + post_files(db, models.AssociationPost.association_id == association_id))
     db.delete(association)
     db.commit()
+    uploads.delete(files)
     return {"message": "Объединение удалено"}
 
 

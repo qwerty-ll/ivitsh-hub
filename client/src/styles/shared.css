@@ -58,6 +58,7 @@
 .hue-cyan   { --tile: var(--hue-cyan);   --tile-soft: var(--hue-cyan-soft); --tile-tint: var(--hue-cyan-tint); --tile-edge: var(--hue-cyan-edge); }
 .hue-slate  { --tile: var(--hue-slate);  --tile-soft: var(--hue-slate-soft); --tile-tint: var(--hue-slate-tint); --tile-edge: var(--hue-slate-edge); }
 .hue-olive  { --tile: var(--hue-olive);  --tile-soft: var(--hue-olive-soft); --tile-tint: var(--hue-olive-tint); --tile-edge: var(--hue-olive-edge); }
+.hue-teal   { --tile: var(--hue-teal);   --tile-soft: var(--hue-teal-soft); --tile-tint: var(--hue-teal-tint); --tile-edge: var(--hue-teal-edge); }
 
 .tile {
   display: inline-flex;

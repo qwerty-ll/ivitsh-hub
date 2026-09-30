@@ -1,7 +1,7 @@
 import re
-from datetime import date, datetime
-from typing import Any, Dict, Optional, List, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from datetime import date, datetime, timezone
+from typing import Annotated, Any, Dict, Optional, List, Literal
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator
 
 
 # --- Contacts a student shares with association leaders ---
@@ -354,3 +354,202 @@ class MyMembership(BaseModel):
     role: str
     status: str
     created_at: Optional[datetime] = None
+
+
+# --- Tasks ---
+def as_utc(value: datetime) -> datetime:
+    # SQLite gives back naive datetimes; everything is stored in UTC
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+# A datetime sent to the client always carries its offset, so the browser shows local (Moscow) time
+UtcDateTime = Annotated[datetime, PlainSerializer(lambda v: as_utc(v).isoformat(), return_type=str)]
+
+TaskStatus = Literal["todo", "in_progress", "review", "done"]
+TaskColor = Literal["blue", "green", "amber", "pink", "violet", "slate"]
+
+
+def _clean_title(value: str) -> str:
+    value = " ".join(value.split())
+    if not value:
+        raise ValueError("Введите название")
+    return value
+
+
+def _utc_or_none(value: Optional[datetime]) -> Optional[datetime]:
+    return as_utc(value).astimezone(timezone.utc) if value else None
+
+
+class AssociationRef(BaseModel):
+    id: int
+    name: str
+
+
+class TaskIn(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str = Field("", max_length=5000)
+    due_at: Optional[datetime] = None
+    # Personal task when absent; then color applies
+    association_id: Optional[int] = None
+    color: Optional[TaskColor] = None
+    # Association tasks: everyone in it, or the listed members
+    to_all: bool = False
+    assignee_ids: List[int] = Field(default_factory=list, max_length=500)
+
+    @field_validator("title")
+    @classmethod
+    def clean_title(cls, v: str) -> str:
+        return _clean_title(v)
+
+    @field_validator("due_at")
+    @classmethod
+    def aware_due(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return _utc_or_none(v)
+
+
+class TaskEdit(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str = Field("", max_length=5000)
+    due_at: Optional[datetime] = None
+    color: Optional[TaskColor] = None
+    # Association tasks: members to add (existing assignees keep their progress)
+    add_assignee_ids: List[int] = Field(default_factory=list, max_length=500)
+
+    @field_validator("title")
+    @classmethod
+    def clean_title(cls, v: str) -> str:
+        return _clean_title(v)
+
+    @field_validator("due_at")
+    @classmethod
+    def aware_due(cls, v: Optional[datetime]) -> Optional[datetime]:
+        return _utc_or_none(v)
+
+
+class TaskStatusIn(BaseModel):
+    status: TaskStatus
+    # A leader moves someone else's card; omitted = my own
+    user_id: Optional[int] = None
+
+
+class TaskCard(BaseModel):
+    """A card on my board: the task and where my copy of it is."""
+    id: int
+    title: str
+    due_at: Optional[UtcDateTime] = None
+    color: Optional[str] = None
+    association: Optional[AssociationRef] = None
+    my_status: TaskStatus
+    comments_count: int = 0
+    attachments_count: int = 0
+    assignees_count: int = 1
+
+
+class AssigneeItem(BaseModel):
+    user_id: int
+    full_name: str
+    group_number: Optional[str] = None
+    status: TaskStatus
+    status_changed_at: Optional[UtcDateTime] = None
+    completed_at: Optional[UtcDateTime] = None
+    vk_url: Optional[str] = None
+    max_contact: Optional[str] = None
+
+
+class ManagedTask(BaseModel):
+    """A task a leader set: how far the assignees got."""
+    id: int
+    title: str
+    due_at: Optional[UtcDateTime] = None
+    association: AssociationRef
+    counts: Dict[str, int]
+    total: int
+    created_at: Optional[UtcDateTime] = None
+
+
+class CommentItem(BaseModel):
+    id: int
+    author_id: int
+    author_name: str
+    text: str
+    created_at: Optional[UtcDateTime] = None
+    can_delete: bool = False
+
+
+class AttachmentItem(BaseModel):
+    id: int
+    kind: Literal["file", "link"]
+    title: str
+    url: Optional[str] = None
+    size: Optional[int] = None
+    uploaded_by: Optional[str] = None
+    created_at: Optional[UtcDateTime] = None
+    can_delete: bool = False
+
+
+class TaskDetail(BaseModel):
+    id: int
+    title: str
+    description: str = ""
+    due_at: Optional[UtcDateTime] = None
+    color: Optional[str] = None
+    association: Optional[AssociationRef] = None
+    created_by: Optional[str] = None
+    created_at: Optional[UtcDateTime] = None
+    can_manage: bool = False
+    my_status: Optional[TaskStatus] = None
+    # All of them for its managers, only mine for an assignee
+    assignees: List[AssigneeItem] = []
+    comments: List[CommentItem] = []
+    attachments: List[AttachmentItem] = []
+
+
+class CommentIn(BaseModel):
+    text: str = Field(..., min_length=1, max_length=2000)
+
+    @field_validator("text")
+    @classmethod
+    def clean_text(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Пустой комментарий")
+        return v
+
+
+class LinkIn(BaseModel):
+    url: str = Field(..., min_length=8, max_length=1000)
+    title: str = Field("", max_length=200)
+
+    @field_validator("url")
+    @classmethod
+    def http_only(cls, v: str) -> str:
+        v = v.strip()
+        if not re.match(r"^https?://[^\s<>\"]+$", v, re.IGNORECASE):
+            raise ValueError("Ссылка должна начинаться с http:// или https://")
+        return v
+
+
+# --- Association announcements ---
+class PostIn(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    text: str = Field("", max_length=5000)
+    to_all: bool = True
+    recipient_ids: List[int] = Field(default_factory=list, max_length=500)
+
+    @field_validator("title")
+    @classmethod
+    def clean_title(cls, v: str) -> str:
+        return _clean_title(v)
+
+
+class PostItem(BaseModel):
+    id: int
+    title: str
+    text: str = ""
+    to_all: bool = True
+    author: Optional[str] = None
+    created_at: Optional[UtcDateTime] = None
+    attachments: List[AttachmentItem] = []
+    # Only for its association's leaders
+    recipients: List[UserBrief] = []
+    can_manage: bool = False

@@ -48,6 +48,7 @@
   --hue-cyan: #0A6A86;    --hue-cyan-soft: #DCF1F8;
   --hue-slate: #3F4B60;   --hue-slate-soft: #E4E9F1;
   --hue-olive: #556308;   --hue-olive-soft: #EEF4D2;
+  --hue-teal: #0E6E62;    --hue-teal-soft: #D6F2EC;
   /* Lighter tint + edge of each hue: the active item in the navigation panel (hue text ≥ 4.9:1 on its tint) */
   --hue-blue-tint: #F0F5FF;  --hue-blue-edge: #B2C8F0;
   --hue-orange-tint: #FEF4EC;  --hue-orange-edge: #D7C4BE;
@@ -58,6 +59,7 @@
   --hue-cyan-tint: #ECF8FC;  --hue-cyan-edge: #AECCDC;
   --hue-slate-tint: #F0F4F8;  --hue-slate-edge: #BBC4D3;
   --hue-olive-tint: #F7FAEA;  --hue-olive-edge: #CBD3A6;
+  --hue-teal-tint: #EDF9F6;  --hue-teal-edge: #A6D1C8;
 
   /* States */
   --success: #1D6B37;

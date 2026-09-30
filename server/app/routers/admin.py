@@ -6,6 +6,8 @@ from app.db.database import get_db
 import app.models as models
 import app.schemas as schemas
 import app.core.security as security
+from app.routers.associations import task_files
+from app.services import uploads
 
 router = APIRouter(prefix="/api/v1", tags=["Admin"])
 
@@ -62,8 +64,13 @@ def delete_user(
     db: Session = Depends(get_db)
 ):
     target_user = _get_manageable_user(db, user_id, current_user)
+    # Personal tasks go with their owner (association tasks stay with the association)
+    personal = (models.Task.association_id.is_(None)) & (models.Task.created_by_id == target_user.id)
+    files = task_files(db, personal)
+    db.query(models.Task).filter(personal).delete(synchronize_session=False)
     db.delete(target_user)
     db.commit()
+    uploads.delete(files)
     return {"status": "deleted", "id": user_id}
 
 

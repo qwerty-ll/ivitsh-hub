@@ -190,3 +190,108 @@ class Membership(Base):
 
     user = relationship("User", back_populates="memberships")
     association = relationship("Association", back_populates="memberships")
+
+
+TASK_STATUSES = ("todo", "in_progress", "review", "done")
+
+
+class Task(Base):
+    """A task of an association (set by its leader) or a personal one (association_id is null)."""
+    __tablename__ = "tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    association_id = Column(Integer, ForeignKey("associations.id", ondelete="CASCADE"), nullable=True, index=True)
+    created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=False, default="", server_default="")
+    due_at = Column(DateTime(timezone=True), nullable=True)
+    # Personal tasks only: one of the palette names the client knows ("blue", "green", ...)
+    color = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    association = relationship("Association")
+    created_by = relationship("User")
+    assignees = relationship("TaskAssignee", back_populates="task", cascade="all, delete-orphan")
+    comments = relationship("TaskComment", back_populates="task", cascade="all, delete-orphan",
+                            order_by="TaskComment.created_at")
+    attachments = relationship("Attachment", back_populates="task", cascade="all, delete-orphan",
+                               order_by="Attachment.created_at")
+
+
+class TaskAssignee(Base):
+    """One person's copy of a task: each assignee moves their own card across the board."""
+    __tablename__ = "task_assignees"
+    __table_args__ = (UniqueConstraint("task_id", "user_id", name="uq_task_assignee"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String, nullable=False, default="todo", server_default="todo")  # see TASK_STATUSES
+    status_changed_at = Column(DateTime(timezone=True), default=_utcnow)
+    # When the work was handed in ("На проверке" or "Готово"): on time or late against due_at
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    task = relationship("Task", back_populates="assignees")
+    user = relationship("User")
+
+
+class TaskComment(Base):
+    __tablename__ = "task_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    author_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    text = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    task = relationship("Task", back_populates="comments")
+    author = relationship("User")
+
+
+class AssociationPost(Base):
+    """An announcement of an association: to all its members or to the chosen ones."""
+    __tablename__ = "association_posts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    association_id = Column(Integer, ForeignKey("associations.id", ondelete="CASCADE"), nullable=False, index=True)
+    author_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    title = Column(String, nullable=False)
+    text = Column(Text, nullable=False, default="", server_default="")
+    to_all = Column(Boolean, nullable=False, default=True, server_default=true())
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    author = relationship("User")
+    recipients = relationship("AssociationPostRecipient", cascade="all, delete-orphan")
+    attachments = relationship("Attachment", back_populates="post", cascade="all, delete-orphan",
+                               order_by="Attachment.created_at")
+
+
+class AssociationPostRecipient(Base):
+    __tablename__ = "association_post_recipients"
+    __table_args__ = (UniqueConstraint("post_id", "user_id", name="uq_post_recipient"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("association_posts.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+
+
+class Attachment(Base):
+    """A file (stored on disk in UPLOAD_DIR, never in the DB or git) or a link, on a task or a post."""
+    __tablename__ = "attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True)
+    post_id = Column(Integer, ForeignKey("association_posts.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind = Column(String, nullable=False)  # "file" | "link"
+    # The original file name, or the link's caption
+    title = Column(String, nullable=False)
+    url = Column(String, nullable=True)
+    stored_name = Column(String, nullable=True)
+    size = Column(Integer, nullable=True)
+    content_type = Column(String, nullable=True)
+    uploaded_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    task = relationship("Task", back_populates="attachments")
+    post = relationship("AssociationPost", back_populates="attachments")
+    uploaded_by = relationship("User")

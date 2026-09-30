@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, CalendarDays, Handshake, MessageSquare, Map, Users, HelpCircle, UserSquare, Shield, Lock
+  LayoutDashboard, CalendarDays, SquareKanban, Handshake, MessageSquare, Map, Users, HelpCircle, UserSquare, Shield, Lock
 } from 'lucide-react';
 
 // One place for every section's name, route, icon and wayfinding hue.
@@ -7,6 +7,7 @@ import {
 export const SECTIONS = {
   dashboard: { label: 'Главная', short: 'Главная', path: '/', Icon: LayoutDashboard, hue: 'blue' },
   schedule: { label: 'Расписание', short: 'Расписание', path: '/schedule', Icon: CalendarDays, hue: 'orange', hint: 'Группы, преподаватели, аудитории' },
+  tasks: { label: 'Задачи', short: 'Задачи', path: '/tasks', Icon: SquareKanban, hue: 'teal', hint: 'Канбан и дедлайны' },
   associations: { label: 'Объединения', short: 'Объединения', path: '/associations', Icon: Handshake, hue: 'olive', hint: 'Клубы, медиа, волонтёры' },
   forum: { label: 'Форум', short: 'Форум', path: '/forum', Icon: MessageSquare, hue: 'violet', hint: 'Спросить сокурсников' },
   map: { label: 'Карта кампуса', short: 'Карта', path: '/map', Icon: Map, hue: 'green', hint: 'Найти аудиторию' },
@@ -17,7 +18,7 @@ export const SECTIONS = {
   privacy: { label: 'Конфиденциальность', short: 'Cookie', path: '/privacy', Icon: Lock, hue: 'slate' },
 };
 
-export const NAV_ORDER = ['dashboard', 'schedule', 'associations', 'forum', 'map', 'teachers', 'faq', 'profile'];
+export const NAV_ORDER = ['dashboard', 'schedule', 'tasks', 'associations', 'forum', 'map', 'teachers', 'faq', 'profile'];
 
 // Mobile bottom bar: the sections students open most; the rest stay in the menu.
-export const TAB_BAR_ORDER = ['dashboard', 'schedule', 'forum', 'map', 'profile'];
+export const TAB_BAR_ORDER = ['dashboard', 'schedule', 'tasks', 'associations', 'profile'];

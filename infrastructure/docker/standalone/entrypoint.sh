@@ -13,6 +13,9 @@ if [ -z "${SECRET_KEY:-}" ]; then
   export SECRET_KEY
 fi
 
+# Files attached to tasks and announcements live in the data volume too
+export UPLOAD_DIR="${UPLOAD_DIR:-$DATA/uploads}"
+
 uvicorn main:app --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips=127.0.0.1 &
 
 healthy=0
