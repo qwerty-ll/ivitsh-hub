@@ -93,7 +93,7 @@ def test_leader_removes_members_but_not_leaders(app, fake_eios, db):
     leader.post(f"/api/v1/associations/{aid}/members/{sid}/decision", json={"approve": True}, headers=CSRF)
     assert leader.delete(f"/api/v1/associations/{aid}/members/{lid}", headers=CSRF).status_code == 400
     assert leader.delete(f"/api/v1/associations/{aid}/members/{sid}", headers=CSRF).status_code == 200
-    assert student.get(f"/api/v1/associations/{aid}").json()["my_status"] == "left"
+    assert student.get(f"/api/v1/associations/{aid}").json()["my_status"] == "removed"
     # Taking the leader role away keeps them as a member
     r = admin.delete(f"/api/v1/admin/associations/{aid}/leaders/{lid}", headers=CSRF)
     assert r.status_code == 200 and r.json()["leaders"] == [] and r.json()["member_count"] == 1
@@ -197,3 +197,44 @@ def test_catalog_lists_russian_names_first(app, client):
     for name in ("IT профессионал", "Театр", "Актив ИВИТШ", "Nexthub"):
         _create(admin, name=name)
     assert [a["name"] for a in client.get("/api/v1/associations").json()] == ["Актив ИВИТШ", "Театр", "IT профессионал", "Nexthub"]
+
+
+def test_excluded_members_cannot_apply_again_and_lose_open_work(app, fake_eios, db):
+    from datetime import datetime, timedelta, timezone
+    admin = login_admin(app)
+    aid = admin.post("/api/v1/admin/associations", json={"name": "Клуб настолок"}, headers=CSRF).json()["id"]
+    leader = login_student(app, fake_eios, username="24-isbo-101", eios_id="9101", full_name="Смирнов Макар Олегович")
+    member = login_student(app, fake_eios, username="24-isbo-102", eios_id="9102", full_name="Петрова Анна Сергеевна")
+    uid = {u.username: u.id for u in db.query(models.User).all()}
+    admin.put(f"/api/v1/admin/associations/{aid}/leaders/{uid['24-isbo-101']}", headers=CSRF)
+    member.post(f"/api/v1/associations/{aid}/apply", json={}, headers=CSRF)
+    leader.post(f"/api/v1/associations/{aid}/members/{uid['24-isbo-102']}/decision", json={"approve": True}, headers=CSRF)
+
+    open_task = leader.post("/api/v1/tasks", json={"title": "Открытая", "association_id": aid, "to_all": True}, headers=CSRF).json()
+    done_task = leader.post("/api/v1/tasks", json={"title": "Сданная", "association_id": aid, "to_all": True}, headers=CSRF).json()
+    member.patch(f"/api/v1/tasks/{done_task['id']}/status", json={"status": "review"}, headers=CSRF)
+    soon = datetime.now(timezone.utc) + timedelta(days=3)
+    ev = leader.post("/api/v1/events", json={"title": "Турнир", "association_id": aid, "starts_at": soon.isoformat(),
+                                             "ends_at": (soon + timedelta(hours=2)).isoformat()}, headers=CSRF).json()
+    member.post(f"/api/v1/events/{ev['id']}/register", json={}, headers=CSRF)
+
+    assert leader.delete(f"/api/v1/associations/{aid}/members/{uid['24-isbo-102']}", headers=CSRF).status_code == 200
+    # Unfinished work and upcoming association events go; handed-in work stays for the statistics
+    assert [t["title"] for t in member.get("/api/v1/tasks/my").json()] == ["Сданная"]
+    assert member.get(f"/api/v1/events/{ev['id']}").status_code == 404
+    r = member.post(f"/api/v1/associations/{aid}/apply", json={}, headers=CSRF)
+    assert r.status_code == 403
+    detail = leader.get(f"/api/v1/associations/{aid}").json()
+    assert [p["full_name"] for p in detail["removed"]] == ["Петрова Анна Сергеевна"]
+    assert member.get(f"/api/v1/associations/{aid}").json()["my_status"] == "removed"
+    # Only the leader brings them back
+    assert leader.post(f"/api/v1/associations/{aid}/members/{uid['24-isbo-102']}/restore", headers=CSRF).json()["status"] == "approved"
+    assert open_task["id"] not in [t["id"] for t in member.get("/api/v1/tasks/my").json()]
+
+
+def test_group_confirmed_by_eios_is_not_edited_by_hand(app, fake_eios):
+    c = login_student(app, fake_eios, username="24-isbo-103", eios_id="9103", group_id=4242)
+    r = c.patch("/api/v1/auth/me", json={"group_number": "25-ИБбо-1"}, headers=CSRF)
+    assert r.status_code == 400
+    typed = login_student(app, fake_eios, username="24-isbo-104", eios_id="9104", group=None)
+    assert typed.patch("/api/v1/auth/me", json={"group_number": "24-ИСбо-2"}, headers=CSRF).json()["group_number"] == "24-ИСбо-2"

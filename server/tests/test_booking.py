@@ -113,3 +113,14 @@ def test_my_bookings_in_the_calendar(people):
     items = leader.get("/api/v1/calendar", params={"start": DAY.isoformat(), "days": 1}).json()["items"]
     assert [(i["type"], i["title"]) for i in items if i["type"] == "booking"] == [("booking", "Ноутбуки: 2")]
     assert [i for i in other.get("/api/v1/calendar", params={"start": DAY.isoformat(), "days": 1}).json()["items"] if i["type"] == "booking"] == []
+
+
+def test_a_finished_booking_cannot_be_cancelled(people, db):
+    admin, a1, leader, a2, other, student = people
+    from datetime import timezone
+    past = datetime.now(timezone.utc) - timedelta(days=1)
+    b = models.Booking(resource="room", zone="top", starts_at=past, ends_at=past + timedelta(hours=1),
+                       association_id=a1, booked_by_id=_uid(db, 1))
+    db.add(b)
+    db.commit()
+    assert leader.post(f"/api/v1/bookings/{b.id}/cancel", json={}, headers=CSRF).status_code == 400

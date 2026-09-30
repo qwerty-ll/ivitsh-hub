@@ -234,6 +234,8 @@ def update_my_profile(
     # Full name comes from EIOS and is not user-editable, so nobody can post as "Администратор" or a teacher.
     if req.group_number is not None and req.group_number.strip():
         group = req.group_number.strip()
+        if group != current_user.group_number and current_user.eios_group_id:
+            raise HTTPException(status_code=400, detail="Группа подтверждена ЭИОС и обновляется при входе")
         if group != current_user.group_number:
             # The EIOS id belonged to the old group
             current_user.group_number = group

@@ -166,7 +166,7 @@ const AssociationDetail = () => {
                       {p.role !== 'leader' && (
                         <button type="button" className="btn btn-ghost btn-sm" disabled={busy}
                           onClick={() => {
-                            if (window.confirm(`Исключить ${p.full_name} из объединения?`)) {
+                            if (window.confirm(`Исключить ${p.full_name} из объединения? Незавершённые задачи и запись на будущие мероприятия объединения снимутся, а подать заявку снова без вашего разрешения будет нельзя.`)) {
                               act(() => associationsApi.removeMember(data.id, p.user_id), 'Участник исключён');
                             }
                           }}>
@@ -175,6 +175,22 @@ const AssociationDetail = () => {
                       )}
                     </PersonRow>
                   ))}
+                  {data.removed?.length > 0 && (
+                    <li className="assoc-removed">
+                      <h3 className="cal-subhead">Исключены</h3>
+                      <p className="assoc-muted">Сами подать заявку снова не могут — только если вы их вернёте.</p>
+                      <ul className="assoc-people">
+                        {data.removed.map(p => (
+                          <PersonRow key={p.user_id} person={p}>
+                            <button type="button" className="btn btn-secondary btn-sm" disabled={busy}
+                              onClick={() => act(() => associationsApi.restoreMember(data.id, p.user_id), `${p.full_name} снова в объединении`)}>
+                              Вернуть
+                            </button>
+                          </PersonRow>
+                        ))}
+                      </ul>
+                    </li>
+                  )}
                 </ul>
               )}
 
@@ -245,7 +261,7 @@ const AssociationDetail = () => {
               <>
                 <p className="assoc-muted">Руководитель видит вас в списке участников и может написать по вашим контактам из профиля.</p>
                 <button type="button" className="btn btn-ghost" disabled={busy}
-                  onClick={() => window.confirm(`Выйти из объединения «${data.name}»?`)
+                  onClick={() => window.confirm(`Выйти из объединения «${data.name}»? Незавершённые задачи объединения и запись на его будущие мероприятия снимутся.`)
                     && act(() => associationsApi.leave(data.id), 'Вы вышли из объединения')}>
                   Выйти из объединения
                 </button>
@@ -267,12 +283,13 @@ const AssociationDetail = () => {
                 }}
               >
                 {data.my_status === 'rejected' && <p className="assoc-muted">Прошлую заявку отклонили — можно подать новую.</p>}
+                {data.my_status === 'removed' && <p className="assoc-muted">Руководитель исключил вас из объединения. Вернуть может только он — напишите ему.</p>}
                 <div className="field">
                   <label className="field-label" htmlFor="assoc-note">Пара слов о себе <span className="assoc-muted">(необязательно)</span></label>
                   <textarea id="assoc-note" className="textarea" rows={3} maxLength={300} value={note}
                     onChange={e => setNote(e.target.value)} placeholder="Например: умею монтировать видео" />
                 </div>
-                <button type="submit" className="btn btn-primary btn-block" disabled={busy}>Подать заявку</button>
+                <button type="submit" className="btn btn-primary btn-block" disabled={busy || data.my_status === 'removed'}>Подать заявку</button>
                 <p className="field-hint">
                   Руководитель увидит ваши ФИО, группу и контакты из <Link to="/profile">профиля</Link>.
                 </p>

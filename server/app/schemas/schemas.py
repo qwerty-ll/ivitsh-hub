@@ -265,7 +265,7 @@ class PersonContacts(BaseModel):
 
 class MemberItem(PersonContacts):
     role: Literal["member", "leader"]
-    status: Literal["pending", "approved", "rejected", "left"]
+    status: Literal["pending", "approved", "rejected", "left", "removed"]
     message: Optional[str] = None
     created_at: Optional[datetime] = None
     decided_at: Optional[datetime] = None
@@ -289,6 +289,8 @@ class AssociationDetail(AssociationItem):
     # Filled only for its leaders and administrators
     members: List[MemberItem] = []
     applications: List[MemberItem] = []
+    # Excluded by a leader: they cannot apply again until restored
+    removed: List[MemberItem] = []
 
 
 class AssociationApply(BaseModel):
@@ -796,7 +798,12 @@ class EventDetail(EventCard):
     # Documents: for those registered and the organizers
     attachments: List[AttachmentItem] = []
     registrations: List[RegistrationItem] = []
+    # Organizers: people taken off the list (they cannot sign up again by themselves)
+    removed: List[UserBrief] = []
     feedback: Optional[FeedbackSummary] = None
+    started: bool = False
+    my_source: Optional[str] = None
+    i_was_removed: bool = False
 
 
 # --- Manual achievements and the ПГАС summary ---
@@ -816,6 +823,14 @@ class AchievementIn(BaseModel):
     @classmethod
     def clean_line(cls, v: str) -> str:
         return " ".join(v.split())
+
+    @field_validator("day")
+    @classmethod
+    def not_in_future(cls, v: date) -> date:
+        # Moscow date: the server may run in UTC
+        if v > (datetime.now(timezone.utc) + timedelta(hours=3)).date():
+            raise ValueError("Вносить можно только то, что уже прошло")
+        return v
 
 
 class AchievementItem(BaseModel):

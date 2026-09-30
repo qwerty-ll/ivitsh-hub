@@ -229,6 +229,8 @@ def cancel_booking(
     b = _load(db, booking_id)
     if not (_is_admin(user) or b.booked_by_id == user.id):
         raise HTTPException(status_code=403, detail="Отменить чужую бронь может только администрация")
+    if b.cancelled_at is None and schemas.as_utc(b.ends_at) <= _now():
+        raise HTTPException(status_code=400, detail="Бронь уже закончилась")
     if b.cancelled_at is None:
         b.cancelled_at, b.cancelled_by_id = _now(), user.id
         b.cancel_reason = data.reason.strip() or None

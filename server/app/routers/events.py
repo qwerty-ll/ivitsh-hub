@@ -6,7 +6,7 @@ Students register themselves as participants or volunteers. Organizers add peopl
 administrator. After the event organizers mark attendance and attach orders and thank-you letters,
 and participants rate it.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -48,7 +48,9 @@ def can_see(db: Session, event: models.Event, user: Optional[models.User]) -> bo
         return False
     if event.scope == "institute":
         return True
-    return bool(user) and (can_manage(db, event, user) or is_member(db, user, event.association_id))
+    # Whoever is on the list sees it too (the administration may add people from outside the association)
+    return bool(user) and (can_manage(db, event, user) or is_member(db, user, event.association_id)
+                           or any(r.user_id == user.id for r in event.registrations))
 
 
 def _load(db: Session, event_id: int) -> Optional[models.Event]:
@@ -59,6 +61,7 @@ def _load(db: Session, event_id: int) -> Optional[models.Event]:
             joinedload(models.Event.created_by),
             selectinload(models.Event.registrations).joinedload(models.EventRegistration.user),
             selectinload(models.Event.feedback),
+            selectinload(models.Event.removals).joinedload(models.EventRemoval.user),
             selectinload(models.Event.attachments).joinedload(models.Attachment.uploaded_by),
         )
         .filter(models.Event.id == event_id)
@@ -133,7 +136,12 @@ def detail(db: Session, event: models.Event, user: Optional[models.User]) -> Dic
         # Orders and thanks carry names: registered people and organizers only
         "attachments": [attachment_item(a, manage) for a in event.attachments] if (manage or mine) else [],
         "registrations": [],
+        "removed": [],
         "feedback": None,
+        "started": _started(event),
+        # Whether the student may change their own registration: before the start, if they signed up themselves
+        "my_source": mine.source if mine else None,
+        "i_was_removed": bool(user) and not mine and _removed(event, user.id),
     })
     if manage:
         regs = sorted(event.registrations, key=lambda r: (r.role != "participant", r.user.full_name))
@@ -145,6 +153,10 @@ def detail(db: Session, event: models.Event, user: Optional[models.User]) -> Dic
             }
             for r in regs
         ]
+        item["removed"] = [
+            {"id": r.user_id, "full_name": r.user.full_name, "group_number": r.user.group_number}
+            for r in sorted(event.removals, key=lambda r: r.user.full_name)
+        ]
         ratings = [f.rating for f in event.feedback]
         item["feedback"] = {
             "count": len(ratings),
@@ -155,7 +167,8 @@ def detail(db: Session, event: models.Event, user: Optional[models.User]) -> Dic
 
 
 def _visible_query(db: Session, user: Optional[models.User]):
-    """Events the user may see: every institute event, and association events of their associations."""
+    """Events the user may see: every institute event, association events of their associations
+    and any event they are on the list of."""
     query = db.query(models.Event).options(
         joinedload(models.Event.association),
         selectinload(models.Event.registrations),
@@ -171,6 +184,9 @@ def _visible_query(db: Session, user: Optional[models.User]):
     scope = models.Event.scope == "institute"
     if mine:
         scope = scope | models.Event.association_id.in_(mine)
+    if user:
+        registered = db.query(models.EventRegistration.event_id).filter(models.EventRegistration.user_id == user.id)
+        scope = scope | models.Event.id.in_(registered)
     return query.filter(scope)
 
 
@@ -224,6 +240,48 @@ def feedback_pending(
     return [card(db, e, user) for e in sorted(events, key=lambda e: schemas.as_utc(e.ends_at), reverse=True)]
 
 
+@router.get("/events/export")
+def export_all(
+    start: date,
+    end: date,
+    format: str = Query("xlsx", pattern="^(xlsx|docx)$"),
+    user: models.User = Depends(security.require_admin),
+    db: Session = Depends(get_db),
+):
+    """Administrators: everyone registered for events of the period — who, which group, in what role, whether they came."""
+    if end < start or (end - start).days > 400:
+        raise HTTPException(status_code=400, detail="Неверный период (не больше года)")
+    since = datetime.combine(start, time(0), tzinfo=timetable.MSK)
+    until = datetime.combine(end + timedelta(days=1), time(0), tzinfo=timetable.MSK)
+    events = (
+        db.query(models.Event)
+        .options(joinedload(models.Event.association),
+                 selectinload(models.Event.registrations).joinedload(models.EventRegistration.user))
+        .filter(models.Event.starts_at >= since, models.Event.starts_at < until)
+        .order_by(models.Event.starts_at)
+        .all()
+    )
+    rows = []
+    for e in events:
+        day = schemas.as_utc(e.starts_at).astimezone(timetable.MSK).date()
+        for r in sorted(e.registrations, key=lambda r: (r.role != "participant", r.user.full_name)):
+            rows.append({
+                "day": day, "title": e.title,
+                "level": "Институт" if e.scope == "institute" else "Объединение",
+                "organizer": e.association.name if e.association else "Администрация ИВИТШ",
+                "full_name": r.user.full_name, "group": r.user.group_number,
+                "role": r.role, "source": r.source, "attended": r.attended,
+            })
+    if format == "xlsx":
+        content, media = pgas.events_report_xlsx(start, end, rows), pgas.XLSX
+    else:
+        content, media = pgas.events_report_docx(start, end, rows, timetable.msk_now().date()), pgas.DOCX
+    return Response(content, media_type=media, headers={
+        "Content-Disposition": f'attachment; filename="events-{start:%Y%m%d}-{end:%Y%m%d}.{format}"',
+        "Cache-Control": "private, no-store",
+    })
+
+
 # --- One event -----------------------------------------------------------------------------------
 
 def _check_rights_for(db: Session, data: schemas.EventIn, user: models.User) -> None:
@@ -269,6 +327,11 @@ def edit_event(
         raise HTTPException(status_code=403, detail="Уровень и организатора мероприятия меняет администрация")
     if _is_admin(user):
         _check_rights_for(db, data, user)
+    counts = _counts(event)
+    if data.participant_limit is not None and data.participant_limit < counts["participants"]:
+        raise HTTPException(status_code=400, detail=f"Уже записано участников: {counts['participants']} — лимит не может быть меньше")
+    if counts["volunteers"] and (data.volunteer_limit is None or data.volunteer_limit < counts["volunteers"]):
+        raise HTTPException(status_code=400, detail=f"Уже записано волонтёров: {counts['volunteers']} — сначала уберите их или оставьте лимит не меньше")
     for field, value in data.model_dump().items():
         setattr(event, field, value)
     db.commit()
@@ -291,6 +354,14 @@ def delete_event(
 
 # --- Registration --------------------------------------------------------------------------------
 
+def _started(event: models.Event) -> bool:
+    return schemas.as_utc(event.starts_at) <= _now()
+
+
+def _removed(event: models.Event, user_id: int) -> bool:
+    return any(r.user_id == user_id for r in event.removals)
+
+
 def _check_place(event: models.Event, role: str, exclude_user: Optional[int] = None) -> None:
     taken = sum(r.role == role and r.user_id != exclude_user for r in event.registrations)
     if role == "volunteer":
@@ -310,13 +381,17 @@ def register(
     db: Session = Depends(get_db),
 ):
     event = get_visible(db, event_id, user)
+    if _started(event):
+        raise HTTPException(status_code=400, detail="Мероприятие уже началось — запись закрыта")
+    if _removed(event, user.id):
+        raise HTTPException(status_code=403, detail="Организаторы убрали вас из списка. Записаться снова можно только по их приглашению")
     if not event.registration_open:
         raise HTTPException(status_code=400, detail="Запись на мероприятие закрыта")
-    if _ended(event):
-        raise HTTPException(status_code=400, detail="Мероприятие уже прошло")
     mine = _mine(event, user)
     if mine and mine.role == data.role:
         return detail(db, event, user)
+    if mine and mine.source != "self":
+        raise HTTPException(status_code=403, detail="Вас записали организаторы — роль меняют они")
     _check_place(event, data.role, exclude_user=user.id)
     if mine:
         mine.role = data.role
@@ -335,8 +410,10 @@ def unregister(
     event = get_visible(db, event_id, user)
     mine = _mine(event, user)
     if mine:
-        if _ended(event):
-            raise HTTPException(status_code=400, detail="Мероприятие уже прошло")
+        if _started(event):
+            raise HTTPException(status_code=400, detail="Мероприятие уже началось — отменить запись нельзя")
+        if mine.source != "self":
+            raise HTTPException(status_code=403, detail="Вас записали организаторы — чтобы отказаться, напишите им")
         event.registrations.remove(mine)
         db.commit()
     return detail(db, _load(db, event_id), user)
@@ -368,6 +445,8 @@ def add_people(
         raise HTTPException(status_code=400, detail="Волонтёры на это мероприятие не нужны")
     have = {r.user_id: r for r in event.registrations}
     source = "admin" if _is_admin(user) else "leader"
+    # Putting someone back is the organizers' call: it lifts the removal
+    event.removals = [r for r in event.removals if r.user_id not in wanted]
     for uid in wanted:
         if uid in have:
             have[uid].role = data.role
@@ -392,7 +471,8 @@ def add_groups(
         if group_key(u.group_number) in keys
     ]
     have = {r.user_id for r in event.registrations}
-    added = [u for u in students if u.id not in have]
+    removed = {r.user_id for r in event.removals}
+    added = [u for u in students if u.id not in have and u.id not in removed]
     event.registrations.extend(
         models.EventRegistration(user_id=u.id, role=data.role, source="admin_group") for u in added
     )
@@ -400,7 +480,9 @@ def add_groups(
     found = {group_key(u.group_number) for u in students}
     return {
         "added": len(added),
-        "already": len(students) - len(added),
+        "already": sum(u.id in have for u in students),
+        # Taken off this event by hand earlier: add them by name to bring them back
+        "removed": sum(u.id in removed and u.id not in have for u in students),
         # Groups nobody from has signed in to the portal yet
         "unknown_groups": [g for g in data.groups if group_key(g) not in found],
     }
@@ -418,6 +500,42 @@ def remove_person(
     if not reg:
         raise HTTPException(status_code=404, detail="Этого человека нет в списке")
     event.registrations.remove(reg)
+    if not _removed(event, user_id):
+        event.removals.append(models.EventRemoval(user_id=user_id, removed_by_id=user.id))
+    db.commit()
+    return detail(db, _load(db, event_id), user)
+
+
+@router.patch("/events/{event_id}/registrations/{user_id}", response_model=schemas.EventDetail)
+def set_role(
+    event_id: int,
+    user_id: int,
+    data: schemas.RegisterIn,
+    user: models.User = Depends(security.require_current_user),
+    db: Session = Depends(get_db),
+):
+    """Organizers switch someone between participant and volunteer (at any time)."""
+    event = get_managed(db, event_id, user)
+    reg = next((r for r in event.registrations if r.user_id == user_id), None)
+    if not reg:
+        raise HTTPException(status_code=404, detail="Этого человека нет в списке")
+    if data.role == "volunteer" and event.volunteer_limit is None:
+        raise HTTPException(status_code=400, detail="Волонтёры на это мероприятие не нужны: включите их в настройках мероприятия")
+    reg.role = data.role
+    db.commit()
+    return detail(db, _load(db, event_id), user)
+
+
+@router.delete("/events/{event_id}/removals/{user_id}", response_model=schemas.EventDetail)
+def allow_again(
+    event_id: int,
+    user_id: int,
+    user: models.User = Depends(security.require_current_user),
+    db: Session = Depends(get_db),
+):
+    """Lets someone taken off the list register themselves again."""
+    event = get_managed(db, event_id, user)
+    event.removals = [r for r in event.removals if r.user_id != user_id]
     db.commit()
     return detail(db, _load(db, event_id), user)
 

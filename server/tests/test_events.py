@@ -109,7 +109,7 @@ def test_leaders_add_members_only_and_groups_are_for_admins(club, db, app, fake_
     assert leader.post(f"/api/v1/events/{ev['id']}/groups", json=body, headers=CSRF).status_code == 403
     _student(app, fake_eios, 4, "Орлова Вера Игоревна")
     r = admin.post(f"/api/v1/events/{ev['id']}/groups", json=body, headers=CSRF).json()
-    assert r == {"added": 2, "already": 1, "unknown_groups": ["99-НЕТ-1"]}  # the leader and Орлова; Петрова was there
+    assert r == {"added": 2, "already": 1, "removed": 0, "unknown_groups": ["99-НЕТ-1"]}  # the leader and Орлова; Петрова was there
     regs = admin.get(f"/api/v1/events/{ev['id']}").json()["registrations"]
     assert sorted(p["source"] for p in regs) == ["admin_group", "admin_group", "leader"]
 
@@ -157,11 +157,11 @@ def test_pgas_summary_with_manual_entries_and_exports(club, db):
     admin.post(f"/api/v1/events/{ev['id']}/registrations", json={"user_ids": [_uid(db, 2)], "role": "volunteer"}, headers=CSRF)
     admin.post(f"/api/v1/events/{ev['id']}/files", params={"name": "Благодарность.pdf"}, content=PDF, headers=CSRF)
     r = member.post("/api/v1/achievements", json={"title": "Олимпиада по программированию", "organizer": "КГУ",
-                                                  "day": "2026-10-10", "role": "Призёр (2 место)"}, headers=CSRF)
+                                                  "day": "2026-09-25", "role": "Призёр (2 место)"}, headers=CSRF)
     assert r.status_code == 201, r.text
     ach = r.json()
     assert member.post(f"/api/v1/achievements/{ach['id']}/files", params={"name": "скан.pdf"}, content=PDF, headers=CSRF).status_code == 201
-    assert outsider.put(f"/api/v1/achievements/{ach['id']}", json={"title": "x", "day": "2026-10-10"}, headers=CSRF).status_code == 404
+    assert outsider.put(f"/api/v1/achievements/{ach['id']}", json={"title": "x", "day": "2026-09-25"}, headers=CSRF).status_code == 404
 
     p = member.get("/api/v1/portfolio", params={"start": "2026-09-01", "end": "2027-01-31"}).json()
     assert [(r["kind"], r["title"], r["role"], r["level"]) for r in p["rows"]] == [
@@ -209,3 +209,99 @@ def test_only_the_main_admin_manages_administrators(app, fake_eios, db):
     assert egor.patch(f"/api/v1/admin/users/{_uid(db, 8)}/block", json={"blocked": True}, headers=CSRF).status_code == 403
     assert egor.delete(f"/api/v1/admin/users/{_uid(db, 8)}", headers=CSRF).status_code == 403
     assert main.patch(f"/api/v1/admin/users/{_uid(db, 8)}/role", json={"role": "student"}, headers=CSRF).status_code == 200
+
+
+
+def test_the_list_is_fixed_once_the_event_starts(club, db):
+    admin, aid, leader, member, outsider = club
+    now = datetime.now(timezone.utc)
+    ev = _event(admin, title="Хакатон", scope="institute", volunteer_limit=5,
+                starts_at=_iso(now - timedelta(hours=1)), ends_at=_iso(now + timedelta(hours=3)))
+    assert outsider.post(f"/api/v1/events/{ev['id']}/register", json={}, headers=CSRF).status_code == 400
+    admin.post(f"/api/v1/events/{ev['id']}/registrations", json={"user_ids": [_uid(db, 2)]}, headers=CSRF)
+    # During the event: no leaving, no switching roles by oneself
+    assert member.delete(f"/api/v1/events/{ev['id']}/register", headers=CSRF).status_code == 400
+    assert member.post(f"/api/v1/events/{ev['id']}/register", json={"role": "volunteer"}, headers=CSRF).status_code == 400
+    d = member.get(f"/api/v1/events/{ev['id']}").json()
+    assert d["started"] and d["my_role"] == "participant" and d["my_source"] == "admin"
+    # The organizers still can
+    r = admin.patch(f"/api/v1/events/{ev['id']}/registrations/{_uid(db, 2)}", json={"role": "volunteer"}, headers=CSRF)
+    assert r.json()["registrations"][0]["role"] == "volunteer"
+
+
+def test_people_added_by_organizers_cannot_change_it_themselves(club, db):
+    admin, aid, leader, member, outsider = club
+    ev = _event(leader, association_id=aid)
+    leader.post(f"/api/v1/events/{ev['id']}/registrations", json={"user_ids": [_uid(db, 2)]}, headers=CSRF)
+    assert member.delete(f"/api/v1/events/{ev['id']}/register", headers=CSRF).status_code == 403
+    # No volunteers wanted: organizers cannot make anyone a volunteer either
+    r = leader.patch(f"/api/v1/events/{ev['id']}/registrations/{_uid(db, 2)}", json={"role": "volunteer"}, headers=CSRF)
+    assert r.status_code == 400
+
+
+def test_removed_people_come_back_only_by_invitation(club, db, app, fake_eios):
+    admin, aid, leader, member, outsider = club
+    ev = _event(admin, title="День ИВИТШ", scope="institute")
+    outsider.post(f"/api/v1/events/{ev['id']}/register", json={}, headers=CSRF)
+    r = admin.delete(f"/api/v1/events/{ev['id']}/registrations/{_uid(db, 3)}", headers=CSRF)
+    assert [p["full_name"] for p in r.json()["removed"]] == ["Ли Михаил Юрьевич"]
+    d = outsider.get(f"/api/v1/events/{ev['id']}").json()
+    assert d["i_was_removed"] and d["my_role"] is None
+    assert outsider.post(f"/api/v1/events/{ev['id']}/register", json={}, headers=CSRF).status_code == 403
+    # Enrolling the whole group skips them
+    r = admin.post(f"/api/v1/events/{ev['id']}/groups", json={"groups": ["23-ИБбо-2"]}, headers=CSRF).json()
+    assert r["added"] == 0 and r["removed"] == 1
+    # Organizers may allow signing up again...
+    admin.delete(f"/api/v1/events/{ev['id']}/removals/{_uid(db, 3)}", headers=CSRF)
+    assert outsider.post(f"/api/v1/events/{ev['id']}/register", json={}, headers=CSRF).status_code == 200
+    # ...or put them back themselves
+    admin.delete(f"/api/v1/events/{ev['id']}/registrations/{_uid(db, 3)}", headers=CSRF)
+    r = admin.post(f"/api/v1/events/{ev['id']}/registrations", json={"user_ids": [_uid(db, 3)]}, headers=CSRF).json()
+    assert r["removed"] == [] and len(r["registrations"]) == 1
+
+
+def test_people_added_from_outside_see_the_association_event(club, db):
+    admin, aid, leader, member, outsider = club
+    ev = _event(leader, association_id=aid)
+    assert outsider.get(f"/api/v1/events/{ev['id']}").status_code == 404
+    admin.post(f"/api/v1/events/{ev['id']}/registrations", json={"user_ids": [_uid(db, 3)]}, headers=CSRF)
+    assert outsider.get(f"/api/v1/events/{ev['id']}").json()["my_role"] == "participant"
+    assert [e["title"] for e in outsider.get("/api/v1/events", params={"view": "mine"}).json()] == ["Квиз"]
+
+
+def test_limits_cannot_drop_below_who_is_registered(club, db):
+    admin, aid, leader, member, outsider = club
+    ev = _event(leader, association_id=aid, volunteer_limit=2)
+    member.post(f"/api/v1/events/{ev['id']}/register", json={"role": "volunteer"}, headers=CSRF)
+    leader.post(f"/api/v1/events/{ev['id']}/registrations", json={"user_ids": [_uid(db, 1)]}, headers=CSRF)
+    base = {"title": "Квиз", "association_id": aid, "starts_at": ev["starts_at"], "ends_at": ev["ends_at"]}
+    assert leader.put(f"/api/v1/events/{ev['id']}", json={**base, "volunteer_limit": 2, "participant_limit": 1}, headers=CSRF).status_code == 200
+    assert leader.put(f"/api/v1/events/{ev['id']}", json={**base, "volunteer_limit": None}, headers=CSRF).status_code == 400
+    r = leader.put(f"/api/v1/events/{ev['id']}", json={**base, "volunteer_limit": 2, "participant_limit": 0}, headers=CSRF)
+    assert r.status_code == 422
+
+
+def test_admin_report_of_who_was_who(club, db):
+    admin, aid, leader, member, outsider = club
+    day = datetime(2026, 9, 20, 12, tzinfo=timezone.utc)
+    ev = _event(admin, title="Хакатон", scope="institute", volunteer_limit=3, starts_at=_iso(day), ends_at=_iso(day + timedelta(hours=5)))
+    admin.post(f"/api/v1/events/{ev['id']}/registrations", json={"user_ids": [_uid(db, 2)], "role": "volunteer"}, headers=CSRF)
+    admin.post(f"/api/v1/events/{ev['id']}/registrations", json={"user_ids": [_uid(db, 3)]}, headers=CSRF)
+    admin.put(f"/api/v1/events/{ev['id']}/attendance", json={"user_ids": [_uid(db, 2)]}, headers=CSRF)
+    params = {"start": "2026-09-01", "end": "2027-01-31"}
+    x = admin.get("/api/v1/events/export", params=params)
+    assert x.status_code == 200, x.text
+    rows = list(load_workbook(io.BytesIO(x.content)).active.iter_rows(min_row=5, values_only=True))
+    assert [(r[2], r[5], r[6], r[7], r[9]) for r in rows] == [
+        ("Хакатон", "Ли Михаил Юрьевич", "23-ИБбо-2", "Участник", "Нет"),
+        ("Хакатон", "Петрова Анна Сергеевна", "24-ИСбо-1", "Волонтёр", "Да"),
+    ]
+    d = admin.get("/api/v1/events/export", params={**params, "format": "docx"})
+    assert Document(io.BytesIO(d.content)).tables[0].rows[1].cells[5].text == "Ли Михаил Юрьевич"
+    assert leader.get("/api/v1/events/export", params=params).status_code == 403
+
+
+def test_manual_entries_cannot_be_in_the_future(club):
+    admin, aid, leader, member, outsider = club
+    future = (datetime.now(timezone.utc) + timedelta(days=5)).date().isoformat()
+    assert member.post("/api/v1/achievements", json={"title": "Олимпиада", "day": future}, headers=CSRF).status_code == 422

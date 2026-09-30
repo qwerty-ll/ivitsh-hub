@@ -340,6 +340,8 @@ export const associationsApi = {
     apiFetch(`/api/v1/associations/${id}/members/${userId}/decision`, json('POST', { approve })),
   removeMember: (id, userId) =>
     apiFetch(`/api/v1/associations/${id}/members/${userId}`, { method: 'DELETE' }),
+  restoreMember: (id, userId) =>
+    apiFetch(`/api/v1/associations/${id}/members/${userId}/restore`, { method: 'POST' }),
 };
 
 // Tasks: my board, the ones I set as a leader, one task with its comments and files
@@ -428,6 +430,9 @@ export const eventsApi = {
   addGroups: (id, groups, role = 'participant') =>
     apiFetch(`/api/v1/events/${id}/groups`, json('POST', { groups, role })),
   removePerson: (id, userId) => apiFetch(`/api/v1/events/${id}/registrations/${userId}`, { method: 'DELETE' }),
+  setRole: (id, userId, role) => apiFetch(`/api/v1/events/${id}/registrations/${userId}`, json('PATCH', { role })),
+  allowAgain: (id, userId) => apiFetch(`/api/v1/events/${id}/removals/${userId}`, { method: 'DELETE' }),
+  reportHref: (format, start, end) => `${API_BASE_URL}/api/v1/events/export?format=${format}&start=${start}&end=${end}`,
   attendance: (id, userIds) => apiFetch(`/api/v1/events/${id}/attendance`, json('PUT', { user_ids: userIds })),
   feedback: (id, rating, text) => apiFetch(`/api/v1/events/${id}/feedback`, json('POST', { rating, text })),
   exportHref: (id) => `${API_BASE_URL}/api/v1/events/${id}/export`,

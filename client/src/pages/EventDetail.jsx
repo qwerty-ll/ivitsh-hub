@@ -46,12 +46,30 @@ const Registration = ({ e, onChange }) => {
       </p>
     ) : <p className="assoc-muted">Мероприятие прошло.</p>;
   }
+  // Once it has started the list is fixed: no signing up, leaving or switching roles
+  if (e.started) {
+    return e.my_role
+      ? <p className="event-status"><CheckCircle2 size={18} {...ICON} />Идёт. Вы: {ROLE_LABEL[e.my_role].toLowerCase()}</p>
+      : <p className="assoc-muted">Мероприятие уже идёт — запись закрыта.</p>;
+  }
+  if (e.i_was_removed) {
+    return <p className="assoc-muted">Организаторы убрали вас из списка. Записаться снова можно только по их приглашению.</p>;
+  }
   const volunteersWanted = e.volunteer_limit !== null;
+  if (e.my_role && e.my_source !== 'self') {
+    return (
+      <>
+        <p className="event-status"><CheckCircle2 size={18} {...ICON} />Организаторы записали вас: {ROLE_LABEL[e.my_role].toLowerCase()}</p>
+        <p className="assoc-muted">Роль меняют организаторы. Если не сможете прийти — напишите им.</p>
+      </>
+    );
+  }
   if (e.my_role) {
     const other = e.my_role === 'participant' ? 'volunteer' : 'participant';
     return (
       <>
         <p className="event-status"><CheckCircle2 size={18} {...ICON} />Вы записаны: {ROLE_LABEL[e.my_role].toLowerCase()}</p>
+        <p className="assoc-muted">Сменить роль или отменить запись можно до начала мероприятия.</p>
         <div className="assoc-leader-actions">
           {e.registration_open && (other === 'participant' || volunteersWanted) && !isFull(e, other) && (
             <button type="button" className="btn btn-secondary" disabled={busy}
@@ -237,13 +255,17 @@ const Participants = ({ e, onChange }) => {
       toast.show(err.message || 'Не удалось сохранить', 'error');
     }
   };
-  const remove = async (r) => {
-    if (!window.confirm(`Убрать ${r.full_name} из списка?`)) return;
+  const run = (fn, done) => async () => {
     try {
-      onChange(await eventsApi.removePerson(e.id, r.user_id));
+      onChange(await fn());
+      if (done) toast.show(done, 'success');
     } catch (err) {
       toast.show(err.message || 'Не удалось', 'error');
     }
+  };
+  const remove = (r) => {
+    if (!window.confirm(`Убрать ${r.full_name} из списка? Сам(а) записаться снова не сможет — только если вы вернёте.`)) return;
+    run(() => eventsApi.removePerson(e.id, r.user_id))();
   };
 
   return (
@@ -268,7 +290,12 @@ const Participants = ({ e, onChange }) => {
               ) : <span className="event-reg-name">{r.full_name}</span>}
               <span className="assoc-person-meta">
                 {r.group_number && <span className="tabular">{r.group_number}</span>}
-                <span className={`badge ${r.role === 'volunteer' ? 'badge-warm' : ''}`}>{ROLE_LABEL[r.role]}</span>
+                <label className="visually-hidden" htmlFor={`role-${r.user_id}`}>Роль: {r.full_name}</label>
+                <select id={`role-${r.user_id}`} className="select event-role-select" value={r.role}
+                  onChange={ev => run(() => eventsApi.setRole(e.id, r.user_id, ev.target.value), 'Роль изменена')()}>
+                  <option value="participant">{ROLE_LABEL.participant}</option>
+                  <option value="volunteer" disabled={e.volunteer_limit === null}>{ROLE_LABEL.volunteer}</option>
+                </select>
                 <span>записал(а): {SOURCE_LABEL[r.source] || r.source}</span>
                 {r.attended === false && <span className="badge badge-danger">не был(а)</span>}
               </span>
@@ -288,6 +315,24 @@ const Participants = ({ e, onChange }) => {
         )}
         <AddPeople e={e} onChange={onChange} />
       </div>
+      {e.removed.length > 0 && (
+        <div className="event-removed">
+          <h3 className="cal-subhead">Убраны из списка</h3>
+          <p className="task-optional">Сами записаться снова не могут. Верните их или разрешите записаться самостоятельно.</p>
+          <ul className="list event-regs">
+            {e.removed.map(p => (
+              <li key={p.id} className="event-reg">
+                <span className="event-reg-name">{p.full_name}</span>
+                <span className="assoc-person-meta">{p.group_number && <span className="tabular">{p.group_number}</span>}</span>
+                <span className="event-removed-actions">
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={run(() => eventsApi.addPeople(e.id, [p.id]), `${p.full_name} снова в списке`)}>Вернуть</button>
+                  {!isOver(e) && <button type="button" className="btn btn-ghost btn-sm" onClick={run(() => eventsApi.allowAgain(e.id, p.id), 'Теперь может записаться сам(а)')}>Разрешить записаться</button>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {e.feedback && e.feedback.count > 0 && (
         <div className="event-feedback-summary">
           <h3 className="cal-subhead">Отзывы: {e.feedback.average} из 5 ({e.feedback.count})</h3>

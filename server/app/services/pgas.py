@@ -137,3 +137,53 @@ def participants_xlsx(title: str, when: str, registrations) -> bytes:
     ]
     return _sheet("Участники", ("№", "ФИО", "Группа", "Роль", "Кто записал", "Был(а)"), rows,
                   (5, 36, 14, 14, 24, 14), [title, when])
+
+
+REPORT_COLUMNS = ("№", "Дата", "Мероприятие", "Уровень", "Организатор", "ФИО", "Группа", "Роль", "Кто записал", "Был(а)")
+
+
+def report_rows(rows) -> List[Tuple]:
+    """rows: dicts with day, title, level, organizer, full_name, group, role, source, attended"""
+    return [
+        (n, r["day"].strftime("%d.%m.%Y"), r["title"], r["level"], r["organizer"], r["full_name"], r["group"] or "",
+         ROLE_TEXT.get(r["role"], r["role"]), SOURCE_TEXT.get(r["source"], r["source"]),
+         {True: "Да", False: "Нет"}.get(r["attended"], "Не отмечено"))
+        for n, r in enumerate(rows, start=1)
+    ]
+
+
+def events_report_xlsx(start: date, end: date, rows) -> bytes:
+    heading = ["Участие в мероприятиях ИВИТШ", f"За {semester_title(start, end)}"]
+    return _sheet("Мероприятия", REPORT_COLUMNS, report_rows(rows), (5, 12, 34, 13, 24, 34, 13, 12, 22, 12), heading)
+
+
+def events_report_docx(start: date, end: date, rows, today: date) -> bytes:
+    doc = Document()
+    section = doc.sections[0]
+    section.page_width, section.page_height = section.page_height, section.page_width
+    for side in ("left_margin", "right_margin", "top_margin", "bottom_margin"):
+        setattr(section, side, Cm(1.5))
+    style = doc.styles["Normal"]
+    style.font.name = "Times New Roman"
+    style.font.size = Pt(10)
+    title = doc.add_paragraph()
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = title.add_run("Участие в мероприятиях ИВИТШ")
+    run.bold = True
+    run.font.size = Pt(14)
+    doc.add_paragraph(f"Период: {semester_title(start, end)}")
+    table = doc.add_table(rows=1, cols=len(REPORT_COLUMNS))
+    table.style = "Table Grid"
+    for cell, text in zip(table.rows[0].cells, REPORT_COLUMNS):
+        cell.text = ""
+        cell.paragraphs[0].add_run(text).bold = True
+    for row in report_rows(rows):
+        for cell, value in zip(table.add_row().cells, row):
+            cell.text = str(value)
+    if not rows:
+        doc.add_paragraph("За этот период записей нет.")
+    doc.add_paragraph()
+    doc.add_paragraph(f"Сформировано на портале «ИВИТШ Хаб» {today:%d.%m.%Y}.")
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()

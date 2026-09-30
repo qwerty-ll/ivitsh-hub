@@ -136,12 +136,10 @@ def test_eios_group_and_its_timetable_id_are_saved(app, fake_eios, db):
     c = login_student(app, fake_eios, group="24-ИСбо-1", group_id=4242)
     me = c.get("/api/v1/auth/me").json()
     assert me["group_number"] == "24-ИСбо-1" and me["eios_group_id"] == 4242
-    # A group typed by hand has no EIOS id, so the old one must not stick to it
+    # A group EIOS confirmed decides group homework and group enrollment: not edited by hand
     r = c.patch("/api/v1/auth/me", json={"group_number": "25-ИВТбо-1"}, headers=CSRF)
-    assert r.json()["group_number"] == "25-ИВТбо-1" and r.json()["eios_group_id"] is None
-    # The next login brings the EIOS group back
-    c = login_student(app, fake_eios, group="24-ИСбо-1", group_id=4242)
-    assert c.get("/api/v1/auth/me").json()["eios_group_id"] == 4242
+    assert r.status_code == 400
+    assert c.get("/api/v1/auth/me").json()["group_number"] == "24-ИСбо-1"
 
 
 def test_full_name_is_not_user_editable(app, fake_eios):

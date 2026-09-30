@@ -183,7 +183,8 @@ class Membership(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     association_id = Column(Integer, ForeignKey("associations.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String, nullable=False, default="member", server_default="member")  # "member" | "leader"
-    status = Column(String, nullable=False, default="pending", server_default="pending")  # "pending" | "approved" | "rejected" | "left"
+    # "pending" | "approved" | "rejected" | "left" | "removed" (excluded by a leader: cannot apply again until restored)
+    status = Column(String, nullable=False, default="pending", server_default="pending")
     # A short note from the applicant to the leader
     message = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
@@ -391,6 +392,7 @@ class Event(Base):
     created_by = relationship("User")
     registrations = relationship("EventRegistration", back_populates="event", cascade="all, delete-orphan")
     feedback = relationship("EventFeedback", cascade="all, delete-orphan")
+    removals = relationship("EventRemoval", cascade="all, delete-orphan")
     attachments = relationship("Attachment", back_populates="event", cascade="all, delete-orphan",
                                order_by="Attachment.created_at")
 
@@ -411,6 +413,21 @@ class EventRegistration(Base):
 
     event = relationship("Event", back_populates="registrations")
     user = relationship("User")
+
+
+class EventRemoval(Base):
+    """Someone the organizers took off an event's list: they cannot register themselves again;
+    only the organizers can put them back (which deletes this row)."""
+    __tablename__ = "event_removals"
+    __table_args__ = (UniqueConstraint("event_id", "user_id", name="uq_event_removal"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    removed_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    user = relationship("User", foreign_keys=[user_id])
 
 
 class EventFeedback(Base):

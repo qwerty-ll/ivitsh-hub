@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Star } from 'lucide-react';
+import { Plus, Star, FileSpreadsheet, FileText } from 'lucide-react';
 import SectionIcon from '../components/SectionIcon';
 import EventForm from '../components/EventForm';
 import Portfolio from '../components/Portfolio';
@@ -8,8 +8,32 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { associationsApi, eventsApi } from '../services/api';
 import EventCard from '../components/EventCard';
+import { semesters } from '../utils/events';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
+
+/** Administrators: everyone registered for events of a semester — full name, group, role, whether they came */
+const AdminReport = () => {
+  const options = useMemo(() => semesters(), []);
+  const [id, setId] = useState(options[0].id);
+  const s = options.find(o => o.id === id);
+  return (
+    <section className="card event-report" aria-labelledby="report-title">
+      <div>
+        <h2 id="report-title">Выгрузка участия</h2>
+        <p className="task-optional">Все мероприятия семестра: кто записан, ФИО, группа, роль, кто записал и был ли.</p>
+      </div>
+      <div className="pgas-controls">
+        <label className="visually-hidden" htmlFor="report-semester">Семестр</label>
+        <select id="report-semester" className="select" value={id} onChange={e => setId(e.target.value)}>
+          {options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+        </select>
+        <a className="btn btn-secondary" href={eventsApi.reportHref('xlsx', s.start, s.end)} download><FileSpreadsheet size={16} {...ICON} />Excel</a>
+        <a className="btn btn-secondary" href={eventsApi.reportHref('docx', s.start, s.end)} download><FileText size={16} {...ICON} />Word</a>
+      </div>
+    </section>
+  );
+};
 
 const TABS = [
   { id: 'upcoming', label: 'Предстоящие' },
@@ -95,6 +119,8 @@ const Events = () => {
           </button>
         ))}
       </div>
+
+      {tab === 'managed' && isAdmin && <AdminReport />}
 
       {tab === 'pgas' ? (
         <Portfolio />

@@ -94,6 +94,25 @@ def require_manager(association_id: int, user: models.User, db: Session) -> mode
     return association
 
 
+def drop_open_work(db: Session, user_id: int, association_id: int) -> None:
+    """Someone left or was excluded: their unfinished task cards and registrations for the
+    association's upcoming events go (handed-in work stays for the statistics)."""
+    task_ids = [tid for (tid,) in db.query(models.Task.id).filter(models.Task.association_id == association_id)]
+    if task_ids:
+        db.query(models.TaskAssignee).filter(
+            models.TaskAssignee.user_id == user_id,
+            models.TaskAssignee.task_id.in_(task_ids),
+            models.TaskAssignee.status.in_(("todo", "in_progress")),
+        ).delete(synchronize_session=False)
+    event_ids = [eid for (eid,) in db.query(models.Event.id).filter(
+        models.Event.association_id == association_id, models.Event.scope == "association",
+        models.Event.starts_at > _now())]
+    if event_ids:
+        db.query(models.EventRegistration).filter(
+            models.EventRegistration.user_id == user_id, models.EventRegistration.event_id.in_(event_ids),
+        ).delete(synchronize_session=False)
+
+
 def _person(user: models.User, with_contacts: bool) -> Dict:
     return {
         "user_id": user.id,
@@ -201,6 +220,7 @@ def get_association(
             (m for m in by_name if m.status == "approved"), key=lambda m: m.role != "leader")]
         detail["applications"] = [_member_item(m) for m in sorted(
             (m for m in association.memberships if m.status == "pending"), key=lambda m: m.created_at or _now())]
+        detail["removed"] = [_member_item(m) for m in by_name if m.status == "removed"]
     return detail
 
 
@@ -219,6 +239,8 @@ def apply(
         raise HTTPException(status_code=400, detail="Вы уже участник этого объединения")
     if m and m.status == "pending":
         raise HTTPException(status_code=400, detail="Заявка уже отправлена и ждёт решения руководителя")
+    if m and m.status == "removed":
+        raise HTTPException(status_code=403, detail="Руководитель исключил вас из объединения. Вернуть может только он — напишите ему")
     if m:
         # Applying again after a refusal or after leaving
         m.status, m.role, m.message, m.created_at, m.decided_at = "pending", "member", req.message, _now(), None
@@ -252,6 +274,7 @@ def leave(
         db.delete(m)
     else:
         m.status, m.decided_at = "left", _now()
+        drop_open_work(db, user.id, association_id)
     db.commit()
     return {"message": "Готово"}
 
@@ -303,9 +326,27 @@ def remove_member(
         raise HTTPException(status_code=404, detail="Участник не найден")
     if m.role == "leader":
         raise HTTPException(status_code=400, detail="Руководителя снимает администратор портала")
-    m.status, m.decided_at = "left", _now()
+    m.status, m.decided_at = "removed", _now()
+    drop_open_work(db, user_id, association_id)
     db.commit()
     return {"message": "Участник исключён"}
+
+
+@router.post("/associations/{association_id}/members/{user_id}/restore", response_model=schemas.MemberItem)
+def restore_member(
+    association_id: int,
+    user_id: int,
+    user: models.User = Depends(security.require_current_user),
+    db: Session = Depends(get_db),
+):
+    """Brings an excluded member back at once."""
+    require_manager(association_id, user, db)
+    m = _membership(db, user_id, association_id)
+    if not m or m.status != "removed":
+        raise HTTPException(status_code=404, detail="Этот человек не исключён")
+    m.status, m.role, m.decided_at = "approved", "member", _now()
+    db.commit()
+    return _member_item(m)
 
 
 # --- Administrators ------------------------------------------------------------------------------
