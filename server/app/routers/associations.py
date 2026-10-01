@@ -13,7 +13,7 @@ from app.db.database import get_db
 import app.models as models
 import app.schemas as schemas
 import app.core.security as security
-from app.services import uploads
+from app.services import audit, uploads
 
 router = APIRouter(prefix="/api/v1", tags=["Associations"])
 
@@ -113,7 +113,8 @@ def _person(user: models.User, with_contacts: bool) -> Dict:
     return {
         "user_id": user.id,
         "full_name": user.full_name,
-        "group_number": user.group_number,
+        # The open web gets only the name: group and contacts are for signed-in students
+        "group_number": user.group_number if with_contacts else None,
         "vk_url": user.vk_url if with_contacts else None,
         "max_contact": user.max_contact if with_contacts else None,
     }
@@ -457,11 +458,11 @@ def admin_delete(
 def admin_add_leader(
     association_id: int,
     user_id: int,
-    _: models.User = Depends(security.require_admin),
+    admin: models.User = Depends(security.require_admin),
     db: Session = Depends(get_db),
 ):
     association = _get_association(db, association_id, include_inactive=True)
-    target = db.query(models.User).filter(models.User.id == user_id).first()
+    target = db.query(models.User).filter(models.User.id == user_id, models.User.auth_source != "deleted").first()
     if not target:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
     m = _membership(db, user_id, association_id)
@@ -469,6 +470,7 @@ def admin_add_leader(
         m = models.Membership(user_id=user_id, association_id=association_id)
         db.add(m)
     m.role, m.status, m.decided_at = "leader", "approved", _now()
+    audit.log(db, admin, "leader_add", target, association.name)
     db.commit()
     db.refresh(association)
     return _admin_item(db, association)
@@ -478,7 +480,7 @@ def admin_add_leader(
 def admin_remove_leader(
     association_id: int,
     user_id: int,
-    _: models.User = Depends(security.require_admin),
+    admin: models.User = Depends(security.require_admin),
     db: Session = Depends(get_db),
 ):
     """The former leader stays in the association as a member."""
@@ -487,6 +489,7 @@ def admin_remove_leader(
     if not m or m.role != "leader":
         raise HTTPException(status_code=404, detail="Этот пользователь не руководит объединением")
     m.role = "member"
+    audit.log(db, admin, "leader_remove", m.user, association.name)
     db.commit()
     db.refresh(association)
     return _admin_item(db, association)

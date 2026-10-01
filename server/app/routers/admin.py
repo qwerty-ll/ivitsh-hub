@@ -1,18 +1,26 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+import secrets
+from datetime import datetime, timezone
+from typing import List, Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy import false
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.database import get_db
 import app.models as models
 import app.schemas as schemas
 import app.core.security as security
+from app.core import locks
+from app.routers import shop
 from app.routers.associations import task_files
-from app.services import uploads
+from app.services import audit, uploads
 
 router = APIRouter(prefix="/api/v1", tags=["Admin"])
 
 
 _MAIN_ADMIN_ONLY = "Права администратора выдаёт и снимает только Главный Администратор ИВИТШ"
+DELETED_NAME = "Удалённый пользователь"
+_ROLE_TEXT = {"student": "Студент", "moderator": "Модератор", "admin": "Администратор"}
 
 
 def _get_manageable_user(db: Session, user_id: int, current_user: models.User) -> models.User:
@@ -29,24 +37,52 @@ def _get_manageable_user(db: Session, user_id: int, current_user: models.User) -
     return target_user
 
 
+def _not_deleted(user: models.User) -> None:
+    if user.auth_source == "deleted":
+        raise HTTPException(status_code=400, detail="Учётная запись уже удалена")
+
+
 @router.get("/admin/users", response_model=List[schemas.UserResponse])
 def get_all_users(
+    response: Response,
     limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000),
     q: str = Query("", max_length=100),
+    role: Literal["", "student", "moderator", "admin"] = "",
+    state: Literal["active", "blocked", "deleted", "all"] = "all",
+    sort: Literal["new", "name", "group", "seen"] = "new",
     current_user: models.User = Depends(security.require_admin),
     db: Session = Depends(get_db)
 ):
-    query = db.query(models.User).order_by(models.User.created_at.desc())
+    """Every account, page by page; X-Total-Count carries how many match. Anonymized ones only on request."""
+    User = models.User
+    query = db.query(User)
+    if role:
+        query = query.filter(User.role == role)
+    if state == "deleted":
+        query = query.filter(User.auth_source == "deleted")
+    else:
+        query = query.filter(User.auth_source != "deleted")
+        if state == "active":
+            query = query.filter(User.is_blocked.is_(False))
+        elif state == "blocked":
+            query = query.filter(User.is_blocked.is_(True))
     needle = q.strip().casefold()
     if needle:
-        # Search by name, login or group; in Python because SQLite does not fold Cyrillic case
-        found = [
-            u for u in query.all()
-            if needle in f"{u.full_name} {u.username} {u.group_number or ''}".casefold()
+        # Matched in Python (SQLite does not fold Cyrillic case), over three short columns only
+        ids = [
+            uid for uid, name, login, group in query.with_entities(User.id, User.full_name, User.username, User.group_number)
+            if needle in f"{name} {login} {group or ''}".casefold()
         ]
-        return found[offset:offset + limit]
-    return query.limit(limit).offset(offset).all()
+        query = db.query(User).filter(User.id.in_(ids)) if ids else query.filter(false())
+    order = {
+        "new": (User.created_at.desc(), User.id.desc()),
+        "name": (User.full_name.asc(), User.id.asc()),
+        "group": (User.group_number.is_(None), User.group_number.asc(), User.full_name.asc()),
+        "seen": (User.last_seen_at.is_(None), User.last_seen_at.desc(), User.id.desc()),
+    }[sort]
+    response.headers["X-Total-Count"] = str(query.count())
+    return query.order_by(*order).limit(limit).offset(offset).all()
 
 
 @router.patch("/admin/users/{user_id}/role", response_model=schemas.UserResponse)
@@ -57,32 +93,85 @@ def update_user_role(
     db: Session = Depends(get_db)
 ):
     target_user = _get_manageable_user(db, user_id, current_user)
+    _not_deleted(target_user)
     if req.role == "admin" and not security.is_protected_admin(current_user):
         raise HTTPException(status_code=403, detail=_MAIN_ADMIN_ONLY)
-    target_user.role = req.role
+    if target_user.role != req.role:
+        audit.log(db, current_user, "role", target_user,
+                  f"{_ROLE_TEXT.get(target_user.role, target_user.role)} → {_ROLE_TEXT[req.role]}")
+        target_user.role = req.role
     db.commit()
     db.refresh(target_user)
     return target_user
 
 
-@router.delete("/admin/users/{user_id}", status_code=200)
-def delete_user(
-    user_id: int,
-    current_user: models.User = Depends(security.require_admin),
-    db: Session = Depends(get_db)
-):
-    target_user = _get_manageable_user(db, user_id, current_user)
-    # Personal tasks go with their owner (association tasks stay with the association)
-    personal = (models.Task.association_id.is_(None)) & (models.Task.created_by_id == target_user.id)
+def _anonymize(db: Session, target: models.User, actor: models.User) -> List[str]:
+    """Strip everything personal but keep the account row, so orders, bookings, attendance and forum
+    threads stay. Returns stored files to remove from disk after the commit."""
+    uid = target.id
+    personal = (models.Task.association_id.is_(None)) & (models.Task.created_by_id == uid)
     files = task_files(db, personal) + [
         name for (name,) in db.query(models.Attachment.stored_name)
         .join(models.ManualAchievement, models.Attachment.achievement_id == models.ManualAchievement.id)
-        .filter(models.ManualAchievement.user_id == target_user.id, models.Attachment.stored_name.isnot(None))
+        .filter(models.ManualAchievement.user_id == uid, models.Attachment.stored_name.isnot(None))
     ]
+    now = datetime.now(timezone.utc)
     db.query(models.Task).filter(personal).delete(synchronize_session=False)
+    # Scans of orders with the student's name are personal data
+    for achievement in db.query(models.ManualAchievement).filter(models.ManualAchievement.user_id == uid):
+        db.delete(achievement)
+    db.query(models.SdoCourse).filter(models.SdoCourse.user_id == uid).delete(synchronize_session=False)
+    # Out of every association; unfinished task cards and upcoming registrations go, handed-in work stays
+    db.query(models.Membership).filter(models.Membership.user_id == uid).delete(synchronize_session=False)
+    db.query(models.TaskAssignee).filter(
+        models.TaskAssignee.user_id == uid, models.TaskAssignee.status.in_(("todo", "in_progress")),
+    ).delete(synchronize_session=False)
+    upcoming = [eid for (eid,) in db.query(models.Event.id).filter(models.Event.starts_at > now)]
+    if upcoming:
+        db.query(models.EventRegistration).filter(
+            models.EventRegistration.user_id == uid, models.EventRegistration.event_id.in_(upcoming),
+        ).delete(synchronize_session=False)
+    # Orders nobody will collect: the stock goes back (bits no longer matter)
+    with locks.serialized(db, shop.LOCK_KEY):
+        for order in (db.query(models.ShopOrder).options(joinedload(models.ShopOrder.item))
+                      .filter(models.ShopOrder.user_id == uid, models.ShopOrder.status.in_(("new", "ready")))):
+            shop._cancel(db, order, actor, "Пользователь удалён")
+        label = f"{DELETED_NAME} #{uid}"
+        # The journal keeps the fact, not the name
+        db.query(models.AdminAction).filter(models.AdminAction.target_user_id == uid).update(
+            {models.AdminAction.target_name: label}, synchronize_session=False)
+        target.username = f"deleted-{uid}-{secrets.token_hex(4)}"
+        target.full_name = DELETED_NAME
+        target.email = target.group_number = target.eios_group_id = target.sdo_id = None
+        target.avatar_url = target.vk_url = target.max_contact = None
+        target.pd_consent_at = target.pd_consent_version = target.sdo_synced_at = None
+        target.hashed_password = security.get_password_hash(secrets.token_urlsafe(32))
+        target.role, target.auth_source, target.is_blocked = "student", "deleted", True
+        db.add(models.AdminAction(actor_id=actor.id, actor_name=audit.user_label(actor), action="anonymize",
+                                  target_user_id=uid, target_name=label))
+        db.commit()
+    return files
+
+
+@router.delete("/admin/users/{user_id}", status_code=200)
+def delete_user(
+    user_id: int,
+    purge: bool = False,
+    current_user: models.User = Depends(security.require_admin),
+    db: Session = Depends(get_db)
+):
+    """Deleting anonymizes the account: the history (orders, bookings, forum, attendance) stays without a name.
+    purge=true erases an already anonymized account with everything tied to it."""
+    target_user = _get_manageable_user(db, user_id, current_user)
+    if not purge:
+        _not_deleted(target_user)
+        uploads.delete(_anonymize(db, target_user, current_user))
+        return {"status": "anonymized", "id": user_id}
+    if target_user.auth_source != "deleted":
+        raise HTTPException(status_code=400, detail="Стереть полностью можно только уже удалённую учётную запись")
+    audit.log(db, current_user, "purge", None, f"{DELETED_NAME} #{user_id}")
     db.delete(target_user)
     db.commit()
-    uploads.delete(files)
     return {"status": "deleted", "id": user_id}
 
 
@@ -95,10 +184,33 @@ def set_user_blocked(
 ):
     """Blocking (unlike deleting) survives the next EIOS login and invalidates existing sessions at once."""
     target_user = _get_manageable_user(db, user_id, current_user)
-    target_user.is_blocked = req.blocked
+    _not_deleted(target_user)
+    if target_user.is_blocked != req.blocked:
+        audit.log(db, current_user, "block" if req.blocked else "unblock", target_user)
+        target_user.is_blocked = req.blocked
     db.commit()
     db.refresh(target_user)
     return target_user
+
+
+@router.get("/admin/actions", response_model=List[schemas.AdminActionResponse])
+def admin_actions(
+    response: Response,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0, le=1_000_000),
+    _: models.User = Depends(security.require_admin),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.AdminAction)
+    response.headers["X-Total-Count"] = str(query.count())
+    rows = query.order_by(models.AdminAction.created_at.desc(), models.AdminAction.id.desc()).limit(limit).offset(offset)
+    return [
+        schemas.AdminActionResponse(
+            id=a.id, actor_name=a.actor_name, action=a.action, action_text=audit.ACTION_TEXT.get(a.action, a.action),
+            target_name=a.target_name, details=a.details, created_at=a.created_at,
+        )
+        for a in rows
+    ]
 
 
 # --- Teachers ---

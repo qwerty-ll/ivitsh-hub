@@ -5,6 +5,7 @@ confirmed facts as personal bits) plus awards and penalties from the administrat
 members get bits for the shop.
 """
 import random
+import threading
 import time as clock
 from collections import defaultdict
 from datetime import date, datetime, timezone
@@ -23,6 +24,9 @@ DEFAULT_NAMES = ["Альфа", "Бета", "Гамма", "Дельта", "Эпс
 _rng = random.SystemRandom()
 _cache: Dict[int, tuple] = {}
 CACHE_SECONDS = 300
+# One computation per tournament at a time: the others wait for it instead of repeating it
+_computing: Dict[int, threading.Lock] = defaultdict(threading.Lock)
+_computing_guard = threading.Lock()
 
 
 def clear_cache() -> None:
@@ -68,9 +72,26 @@ def _member_points(db: Session, member: models.TribeMember, t: models.Tournament
 
 def standings(db: Session, t: models.Tournament) -> Dict:
     """Tribes by points, and every member's contribution. Cached for a few minutes: it is heavy."""
+    hit = _fresh(t)
+    if hit is not None:
+        return hit
+    with _computing_guard:
+        lock = _computing[t.id]
+    with lock:
+        hit = _fresh(t)
+        if hit is not None:
+            return hit
+        return _compute(db, t)
+
+
+def _fresh(t: models.Tournament):
     hit = _cache.get(t.id)
     if hit and clock.time() - hit[0] < CACHE_SECONDS and t.status != "finished":
         return hit[1]
+    return None
+
+
+def _compute(db: Session, t: models.Tournament) -> Dict:
     t = (
         db.query(models.Tournament)
         .options(selectinload(models.Tournament.tribes).selectinload(models.Tribe.members).joinedload(models.TribeMember.user),

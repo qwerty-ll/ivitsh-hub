@@ -90,10 +90,14 @@
     right: calc(var(--space-4) + 3.5rem + var(--space-2));
     bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom) + var(--space-3));
     max-width: none;
-    flex-wrap: wrap;
-    padding: var(--space-3);
+    padding: var(--space-2) var(--space-3);
   }
-  .cookie-notice-icon { display: none; }
+  .cookie-notice-icon,
+  .cookie-notice-more { display: none; }
+  /* Room under the content for the notice, so it covers nothing at the end of a page */
+  body.cookie-notice-open .app-main {
+    padding-bottom: calc(var(--tab-bar-height) + env(safe-area-inset-bottom) + 5rem + 4.5rem);
+  }
   .app-footer { padding-inline: var(--space-4); }
 }
 @media (max-width: 600px) {

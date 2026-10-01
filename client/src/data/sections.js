@@ -4,16 +4,17 @@ import {
 
 // One place for every section's name, route, icon and wayfinding hue.
 // The hue only colors the section's icon tile (see .tile and .hue-* in shared.css).
+// auth: the section is personal and empty without signing in, so guests do not see it in the menu.
 export const SECTIONS = {
   dashboard: { label: 'Главная', short: 'Главная', path: '/', Icon: LayoutDashboard, hue: 'blue' },
-  calendar: { label: 'Календарь', short: 'Календарь', path: '/calendar', Icon: CalendarDays, hue: 'orange', hint: 'Пары, собрания, дедлайны' },
+  calendar: { label: 'Календарь', short: 'Календарь', path: '/calendar', Icon: CalendarDays, hue: 'orange', hint: 'Пары, собрания, дедлайны', auth: true },
   schedule: { label: 'Расписание', short: 'Расписание', path: '/schedule', Icon: CalendarSearch, hue: 'orange', hint: 'Группы, преподаватели, аудитории' },
-  tasks: { label: 'Задачи', short: 'Задачи', path: '/tasks', Icon: SquareKanban, hue: 'teal', hint: 'Канбан и дедлайны' },
+  tasks: { label: 'Задачи', short: 'Задачи', path: '/tasks', Icon: SquareKanban, hue: 'teal', hint: 'Канбан и дедлайны', auth: true },
   associations: { label: 'Объединения', short: 'Объединения', path: '/associations', Icon: Handshake, hue: 'olive', hint: 'Клубы, медиа, волонтёры' },
   events: { label: 'Мероприятия', short: 'События', path: '/events', Icon: PartyPopper, hue: 'red', hint: 'Запись и ПГАС' },
-  tribes: { label: 'Трайбы', short: 'Трайбы', path: '/tribes', Icon: Swords, hue: 'violet', hint: 'Турнир команд' },
-  shop: { label: 'Магазин', short: 'Магазин', path: '/shop', Icon: ShoppingBag, hue: 'green', hint: 'Мерч за биты' },
-  booking: { label: 'Бронь 108', short: 'Бронь', path: '/booking', Icon: DoorOpen, hue: 'cyan', hint: 'Коворкинг и ноутбуки' },
+  tribes: { label: 'Трайбы', short: 'Трайбы', path: '/tribes', Icon: Swords, hue: 'violet', hint: 'Турнир команд', auth: true },
+  shop: { label: 'Магазин', short: 'Магазин', path: '/shop', Icon: ShoppingBag, hue: 'green', hint: 'Мерч за биты', auth: true },
+  booking: { label: 'Бронь 108', short: 'Бронь', path: '/booking', Icon: DoorOpen, hue: 'cyan', hint: 'Коворкинг и ноутбуки', auth: true },
   forum: { label: 'Форум', short: 'Форум', path: '/forum', Icon: MessageSquare, hue: 'violet', hint: 'Спросить сокурсников' },
   map: { label: 'Карта кампуса', short: 'Карта', path: '/map', Icon: Map, hue: 'green', hint: 'Найти аудиторию' },
   teachers: { label: 'Преподаватели', short: 'Преподаватели', path: '/teachers', Icon: Users, hue: 'pink', hint: 'Кабинеты и почта' },
@@ -32,6 +33,7 @@ export const NAV_GROUPS = [
 ];
 
 // Mobile bottom bar: the sections students open most; the rest stay in the menu.
-// Guests have no calendar of their own, so they get the public timetable in its place.
+// Guests have no calendar or tasks of their own: they get the public timetable and events instead.
 export const TAB_BAR_ORDER = ['dashboard', 'calendar', 'tasks', 'associations', 'profile'];
-export const tabBarOrder = (isLoggedIn) => (isLoggedIn ? TAB_BAR_ORDER : TAB_BAR_ORDER.map(id => (id === 'calendar' ? 'schedule' : id)));
+const GUEST_TABS = { calendar: 'schedule', tasks: 'events' };
+export const tabBarOrder = (isLoggedIn) => (isLoggedIn ? TAB_BAR_ORDER : TAB_BAR_ORDER.map(id => GUEST_TABS[id] || id));

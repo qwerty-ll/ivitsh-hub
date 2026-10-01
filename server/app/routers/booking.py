@@ -197,15 +197,16 @@ def create_booking(
     if data.resource == "laptops" and data.laptops > settings.LAPTOPS_TOTAL:
         raise HTTPException(status_code=400, detail=f"Всего ноутбуков: {settings.LAPTOPS_TOTAL}")
     _check_time(data.starts_at, data.ends_at)
-    if not security.is_admin(user):
-        if data.ends_at - data.starts_at > timedelta(hours=LEADER_MAX_HOURS):
-            raise HTTPException(status_code=400, detail=f"Одна бронь — не дольше {LEADER_MAX_HOURS} часов")
-        upcoming = db.query(models.Booking).filter(models.Booking.booked_by_id == user.id, models.Booking.cancelled_at.is_(None),
-                                                   models.Booking.ends_at > _now()).count()
-        if upcoming >= LEADER_MAX_UPCOMING:
-            raise HTTPException(status_code=409, detail=f"У вас уже {LEADER_MAX_UPCOMING} предстоящих броней — отмените ненужные")
+    if not security.is_admin(user) and data.ends_at - data.starts_at > timedelta(hours=LEADER_MAX_HOURS):
+        raise HTTPException(status_code=400, detail=f"Одна бронь — не дольше {LEADER_MAX_HOURS} часов")
 
     with locks.serialized(db, LOCK_KEY):
+        # Counted under the lock: parallel requests must not slip past the limit together
+        if not security.is_admin(user):
+            upcoming = db.query(models.Booking).filter(models.Booking.booked_by_id == user.id, models.Booking.cancelled_at.is_(None),
+                                                       models.Booking.ends_at > _now()).count()
+            if upcoming >= LEADER_MAX_UPCOMING:
+                raise HTTPException(status_code=409, detail=f"У вас уже {LEADER_MAX_UPCOMING} предстоящих броней — отмените ненужные")
         if data.resource == "room":
             _check_room(db, data.zone, data.starts_at, data.ends_at)
         else:

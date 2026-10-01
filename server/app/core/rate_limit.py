@@ -70,15 +70,20 @@ def too_many_requests(detail: str = "Слишком много попыток. �
     return HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail)
 
 
-# Failed logins: per account (stops password guessing) and per IP (stops spraying many accounts).
+# Failed logins: per account and address (stops password guessing) and per IP (stops spraying many accounts).
+# Keyed by the pair, not the login alone: otherwise anyone who knows a login could lock its owner out.
 # The per-IP budget is generous because the whole campus Wi-Fi shares one NAT address.
 login_failures_by_user = RateLimiter(max_events=5, window_seconds=15 * 60)
-login_failures_by_ip = RateLimiter(max_events=100, window_seconds=15 * 60)
+login_failures_by_ip = RateLimiter(max_events=300, window_seconds=15 * 60)
 admin_login_failures_by_ip = RateLimiter(max_events=10, window_seconds=15 * 60)
 chat_requests = RateLimiter(max_events=20, window_seconds=60)
 document_requests = RateLimiter(max_events=30, window_seconds=60)
 # Forum questions and answers, homework entries, comments: a person does not write more than this
 content_posts = RateLimiter(max_events=30, window_seconds=10 * 60)
+
+
+def login_key(kind: str, username: str, ip: str) -> str:
+    return f"{kind}:{username.strip().lower()}|{ip}"
 
 
 def check_posting(user) -> None:

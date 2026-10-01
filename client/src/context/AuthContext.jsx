@@ -63,7 +63,7 @@ const fromCache = (cached) => {
 };
 
 export const AuthProvider = ({ children }) => {
-  // The cached profile only drives the UI until /auth/me confirms it; the server enforces all access.
+  // The cached profile only drives the UI until /auth/session confirms it; the server enforces all access.
   const [user, setUser] = useState(() => {
     try {
       const saved = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -105,12 +105,20 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
   }, [resetSession]);
 
-  // Restore & verify the session on app load
+  // True once the server has said who is signed in (pages that need a role wait for it before redirecting)
+  const [sessionChecked, setSessionChecked] = useState(false);
+
+  // Restore & verify the session on app load. /auth/session answers guests with 200 and no user,
+  // so a visitor's console stays free of 401 errors.
   useEffect(() => {
     LEGACY_KEYS.forEach(safeRemove);
-    authApi.getMe()
-      .then((res) => {
-        if (!res || !res.id) return;
+    authApi.getSession()
+      .then(({ user: res } = {}) => {
+        if (!res || !res.id) {
+          // The cookie is gone or dead: a cached profile means the session ended
+          if (resetSession()) setSessionExpired(true);
+          return;
+        }
         const fresh = toClientUser(res);
         let cached = null;
         try { cached = JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || 'null'); } catch { /* ignore */ }
@@ -123,8 +131,9 @@ export const AuthProvider = ({ children }) => {
         if (err.status !== 401) {
           console.warn('[AuthContext] Could not verify session, keeping cached profile:', err.message);
         }
-      });
-  }, [saveUser]);
+      })
+      .finally(() => setSessionChecked(true));
+  }, [saveUser, resetSession]);
 
   const completeLogin = (res) => {
     if (!res || !res.user) return { error: 'Не удалось авторизоваться' };
@@ -182,17 +191,16 @@ export const AuthProvider = ({ children }) => {
   const isAdmin = user?.role === 'admin';
   const isMainAdmin = isAdmin && !!user?.mainAdmin;
   const isModerator = user?.role === 'moderator';
-  const isCurator = user?.role === 'curator';
   const canModerate = isAdmin || isModerator;
 
   return (
     <AuthContext.Provider value={{
       user,
+      sessionChecked,
       isLoggedIn,
       isAdmin,
       isMainAdmin,
       isModerator,
-      isCurator,
       canModerate,
       sessionExpired,
       login,

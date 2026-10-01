@@ -4,11 +4,23 @@ from typing import Annotated, Any, Dict, Optional, List, Literal
 from pydantic import BaseModel, ConfigDict, Field, PlainSerializer, field_validator, model_validator
 
 
+def as_utc(value: datetime) -> datetime:
+    # SQLite gives back naive datetimes; everything is stored in UTC
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+# A datetime sent to the client always carries its offset, so the browser shows local (Moscow) time
+UtcDateTime = Annotated[datetime, PlainSerializer(lambda v: as_utc(v).isoformat(), return_type=str)]
+
+
 # --- Contacts a student shares with association leaders ---
 # VK is accepted as a link or a bare name and stored as the bare name ("id12345", "ivan.petrov").
 _VK_PREFIX = re.compile(r"^(?:https?://)?(?:m\.|www\.)?vk\.(?:com|ru)/|^@", re.IGNORECASE)
 _VK_NAME = re.compile(r"^[A-Za-z0-9_.]{2,50}$")
 _UNSAFE_TEXT = re.compile(r"[<>\x00-\x1f]")
+# Max is a phone, a nickname or a max.ru link; any other scheme ("javascript:", "data:") is refused
+_URL_SCHEME = re.compile(r"^[a-z][a-z0-9+.\-]*:", re.IGNORECASE)
+_MAX_LINK = re.compile(r"^(?:https?://)?(?:www\.)?max\.ru/(\S*)$", re.IGNORECASE)
 
 
 def normalize_vk(value: Optional[str]) -> Optional[str]:
@@ -28,6 +40,11 @@ def normalize_max(value: Optional[str]) -> Optional[str]:
     value = value.strip()
     if _UNSAFE_TEXT.search(value):
         raise ValueError("Max: недопустимые символы")
+    link = _MAX_LINK.match(value)
+    if link:
+        return f"https://max.ru/{link.group(1)}"
+    if _URL_SCHEME.match(value) or "//" in value:
+        raise ValueError("Max: укажите телефон, ник или ссылку max.ru")
     return value
 
 # --- User & Auth Schemas ---
@@ -73,17 +90,30 @@ class UserResponse(BaseModel):
     is_blocked: bool = False
     vk_url: Optional[str] = None
     max_contact: Optional[str] = None
+    last_seen_at: Optional[UtcDateTime] = None
     created_at: datetime
+
+class SessionResponse(BaseModel):
+    user: Optional[UserResponse] = None
 
 class LoginResponse(BaseModel):
     # The JWT is only delivered as an httpOnly cookie so page scripts can never read it.
     user: UserResponse
 
 class RoleUpdateSchema(BaseModel):
-    role: Literal["student", "curator", "moderator", "admin"]
+    role: Literal["student", "moderator", "admin"]
 
 class BlockUpdateSchema(BaseModel):
     blocked: bool
+
+class AdminActionResponse(BaseModel):
+    id: int
+    actor_name: str
+    action: str
+    action_text: str
+    target_name: Optional[str] = None
+    details: Optional[str] = None
+    created_at: UtcDateTime
 
 # --- Forum Schemas ---
 class ForumAnswerCreate(BaseModel):
@@ -359,13 +389,6 @@ class MyMembership(BaseModel):
 
 
 # --- Tasks ---
-def as_utc(value: datetime) -> datetime:
-    # SQLite gives back naive datetimes; everything is stored in UTC
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-
-
-# A datetime sent to the client always carries its offset, so the browser shows local (Moscow) time
-UtcDateTime = Annotated[datetime, PlainSerializer(lambda v: as_utc(v).isoformat(), return_type=str)]
 
 TaskStatus = Literal["todo", "in_progress", "review", "done"]
 TaskColor = Literal["blue", "green", "amber", "pink", "violet", "slate"]

@@ -17,7 +17,7 @@ import app.models as models
 import app.schemas as schemas
 import app.core.security as security
 from app.core import locks
-from app.services import progress, uploads
+from app.services import audit, progress, uploads
 
 router = APIRouter(prefix="/api/v1", tags=["Shop"])
 
@@ -235,11 +235,12 @@ def set_order_status(order_id: int, data: schemas.OrderStatusIn,
 @router.post("/bits/grants", status_code=201)
 def grant(data: schemas.GrantIn, user: models.User = Depends(security.require_admin), db: Session = Depends(get_db)):
     """Bits by hand: a prize for a contest outside the portal, or a correction."""
-    target = db.query(models.User).filter(models.User.id == data.user_id).first()
+    target = db.query(models.User).filter(models.User.id == data.user_id, models.User.auth_source != "deleted").first()
     if not target:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
     if target.id == user.id:
         raise HTTPException(status_code=403, detail="Начислить биты себе нельзя: попросите другого администратора")
     db.add(models.BitsGrant(user_id=target.id, amount=data.amount, reason=data.reason, created_by_id=user.id))
+    audit.log(db, user, "bits_grant", target, f"{data.amount:+d}: {data.reason}")
     db.commit()
     return {"balance": progress.balance(db, target)}

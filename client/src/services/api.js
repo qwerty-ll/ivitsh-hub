@@ -58,7 +58,8 @@ const writeCache = (endpoint, data) => {
 };
 
 export const apiFetch = async (endpoint, options = {}) => {
-  const { retries, timeout, useCache, headers: extraHeaders, ...fetchOptions } = options;
+  // withTotal: resolve to { items, total }, the total taken from the X-Total-Count header of a paged list
+  const { retries, timeout, useCache, withTotal, headers: extraHeaders, ...fetchOptions } = options;
   const method = (fetchOptions.method || 'GET').toUpperCase();
   const isGet = method === 'GET';
   const headers = {
@@ -116,6 +117,10 @@ export const apiFetch = async (endpoint, options = {}) => {
 
     const data = await res.json();
     if (enableCache) writeCache(endpoint, data);
+    if (withTotal) {
+      const total = Number(res.headers.get('X-Total-Count'));
+      return { items: Array.isArray(data) ? data : [], total: Number.isFinite(total) ? total : null };
+    }
     return data;
   }
 
@@ -140,6 +145,9 @@ export const authApi = {
     apiFetch('/api/v1/auth/logout', { method: 'POST' }),
   getMe: () =>
     apiFetch('/api/v1/auth/me'),
+  // { user } or { user: null } for a guest — never a 401
+  getSession: () =>
+    apiFetch('/api/v1/auth/session'),
   updateProfile: (data) =>
     apiFetch('/api/v1/auth/me', json('PATCH', data)),
 };
@@ -176,8 +184,11 @@ export const forumApi = {
 // Admin Services
 export const adminApi = {
   // Users
-  getUsers: (limit = 100, offset = 0) =>
-    apiFetch(`/api/v1/admin/users?limit=${limit}&offset=${offset}`),
+  // { q, role, state, sort, limit, offset } -> { items, total }
+  getUsers: (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null));
+    return apiFetch(`/api/v1/admin/users?${query}`, { withTotal: true });
+  },
   searchUsers: (q) =>
     apiFetch(`/api/v1/admin/users?limit=20&q=${encodeURIComponent(q)}`),
 
@@ -197,8 +208,14 @@ export const adminApi = {
     apiFetch(`/api/v1/admin/users/${userId}/role`, json('PATCH', { role })),
   setUserBlocked: (userId, blocked) =>
     apiFetch(`/api/v1/admin/users/${userId}/block`, json('PATCH', { blocked })),
-  deleteUser: (userId) =>
-    apiFetch(`/api/v1/admin/users/${userId}`, { method: 'DELETE' }),
+  // Anonymizes the account; purge erases an already anonymized one with its history
+  deleteUser: (userId, purge = false) =>
+    apiFetch(`/api/v1/admin/users/${userId}${purge ? '?purge=true' : ''}`, { method: 'DELETE' }),
+  getActions: (limit = 50, offset = 0) =>
+    apiFetch(`/api/v1/admin/actions?limit=${limit}&offset=${offset}`, { withTotal: true }),
+  // Forum moderation: a page of threads with the total
+  getForumPage: (limit = 50, offset = 0) =>
+    apiFetch(`/api/v1/forum/questions?limit=${limit}&offset=${offset}`, { withTotal: true }),
 
   // Teachers
   getTeachers: () => apiFetch('/api/v1/teachers'),

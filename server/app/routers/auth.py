@@ -24,7 +24,7 @@ _LOGIN_LOOKS_LIKE_RAW_ID = re.compile(r"^\d{2}-[a-zа-я]+-\d+", re.IGNORECASE)
 _INVALID_CREDENTIALS = "Неверный логин или пароль ЭИОС КГУ. Проверьте данные и попробуйте снова."
 _INVALID_ADMIN_CREDENTIALS = "Неверный логин или пароль Администратора ИВИТШ"
 # Edition of the consent text on /privacy#consent (client/src/pages/Privacy.jsx, EDITION): change both together
-PD_CONSENT_VERSION = "2026-09-30"
+PD_CONSENT_VERSION = "2026-10-01"
 
 
 def _find_user(db: Session, username: str) -> Optional[models.User]:
@@ -56,7 +56,7 @@ def _login_response(response: Response, user: models.User) -> schemas.LoginRespo
 def admin_login(user_in: schemas.UserLogin, request: Request, response: Response, db: Session = Depends(get_db)):
     ip = rate_limit.client_ip(request)
     username = user_in.username.strip()
-    user_key = f"admin:{username.lower()}"
+    user_key = rate_limit.login_key("admin", username, ip)
     if rate_limit.admin_login_failures_by_ip.is_limited(ip) or rate_limit.login_failures_by_user.is_limited(user_key):
         raise rate_limit.too_many_requests()
 
@@ -129,7 +129,7 @@ async def eios_login(
     consent_at = datetime.now(timezone.utc)
 
     ip = rate_limit.client_ip(request)
-    user_key = f"eios:{username.lower()}"
+    user_key = rate_limit.login_key("eios", username, ip)
     if rate_limit.login_failures_by_user.is_limited(user_key) or rate_limit.login_failures_by_ip.is_limited(ip):
         raise rate_limit.too_many_requests()
 
@@ -223,6 +223,19 @@ async def eios_login(
 @router.get("/me", response_model=schemas.UserResponse)
 def get_me(current_user: models.User = Depends(security.require_current_user)):
     return _user_response(current_user)
+
+
+@router.get("/session", response_model=schemas.SessionResponse)
+def get_session(
+    request: Request,
+    response: Response,
+    current_user: Optional[models.User] = Depends(security.get_current_user),
+):
+    """Who is signed in, or nobody: answered on every page load, so a guest gets 200, not a 401 in the console."""
+    if current_user is None and security.AUTH_COOKIE_NAME in request.cookies:
+        # Expired, revoked or blocked: drop the dead cookie
+        security.clear_auth_cookie(response)
+    return schemas.SessionResponse(user=_user_response(current_user) if current_user else None)
 
 
 @router.patch("/me", response_model=schemas.UserResponse)

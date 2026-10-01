@@ -21,6 +21,8 @@ const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 
 // The tab bar already has the calendar, tasks and associations; these are the other main sections (the rest is in the menu)
 const SHORTCUTS = ['events', 'tribes', 'shop', 'map'];
+// Guests get sections that work without signing in
+const GUEST_SHORTCUTS = ['events', 'forum', 'map', 'teachers'];
 
 const pad2 = (n) => String(n).padStart(2, '0');
 const localIso = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -348,7 +350,7 @@ const Dashboard = () => {
       {/* SECTION SHORTCUTS */}
       <nav className="dash-shortcuts" aria-label="Разделы портала">
         <ul>
-          {SHORTCUTS.map((id) => {
+          {(isLoggedIn ? SHORTCUTS : GUEST_SHORTCUTS).map((id) => {
             const { label, path, hint } = SECTIONS[id];
             return (
               <li key={id}>

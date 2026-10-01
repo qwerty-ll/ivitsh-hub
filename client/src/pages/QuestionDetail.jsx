@@ -47,7 +47,6 @@ const QuestionDetail = () => {
   const getRoleBadge = (role) => {
     if (role === 'admin') return <span className="badge badge-accent">Админ</span>;
     if (role === 'moderator') return <span className="badge badge-warning">Модератор</span>;
-    if (role === 'curator') return <span className="badge badge-success">Куратор</span>;
     return null;
   };
 

@@ -6,14 +6,18 @@ import { SECTIONS, NAV_GROUPS } from '../data/sections';
 
 const ICON = { size: 20, strokeWidth: 1.75, 'aria-hidden': true };
 
-const ROLE_LABEL = { admin: 'Администратор', moderator: 'Модератор', curator: 'Куратор' };
+const ROLE_LABEL = { admin: 'Администратор', moderator: 'Модератор' };
 
 const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen }) => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { user, isLoggedIn, isAdmin } = useAuth();
 
-  const groups = isAdmin ? [...NAV_GROUPS, { title: 'Управление', items: ['admin'] }] : NAV_GROUPS;
+  const all = isAdmin ? [...NAV_GROUPS, { title: 'Управление', items: ['admin'] }] : NAV_GROUPS;
+  // Guests see only what works without signing in
+  const groups = isLoggedIn ? all : all
+    .map(group => ({ ...group, items: group.items.filter(id => !SECTIONS[id].auth) }))
+    .filter(group => group.items.length > 0);
 
   const goTo = (path) => {
     navigate(path);

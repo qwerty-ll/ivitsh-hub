@@ -1,17 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DOMPurify from 'dompurify';
-import { Trash2, Save, Lock, LockOpen } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { adminApi } from '../services/api';
+import { adminApi, forumApi } from '../services/api';
 import SectionIcon from '../components/SectionIcon';
-import { Field, Toolbar, RefreshButton, ListSkeleton, LoadError, RowActions } from '../components/admin/AdminUi';
+import { Field, Toolbar, RefreshButton, ListSkeleton, RowActions } from '../components/admin/AdminUi';
 import AdminAssociations from '../components/admin/AdminAssociations';
+import AdminUsers from '../components/admin/AdminUsers';
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true };
-
-const ROLE_LABELS = { student: 'Студент', moderator: 'Модератор', admin: 'Администратор' };
 
 const formatLongDate = (value) => (value
   ? new Date(value).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -29,65 +28,26 @@ const focusEditor = (fieldId) => {
 };
 
 const AdminPanel = () => {
-  const { isAdmin, user, isMainAdmin } = useAuth();
+  const { isAdmin, sessionChecked } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
   const tabRefs = useRef({});
   const [activeTab, setActiveTab] = useState('announcements');
   const [associationsCount, setAssociationsCount] = useState(null);
-  const [usersList, setUsersList] = useState([]);
 
-  // Redirect non-admins
+  // Redirect non-admins, once the server has confirmed who is signed in (a reload of /admin keeps the page)
   useEffect(() => {
-    if (!isAdmin) {
+    if (sessionChecked && !isAdmin) {
       navigate('/');
     }
-  }, [isAdmin, navigate]);
+  }, [sessionChecked, isAdmin, navigate]);
 
-  // --- USERS ---
-  const [usersError, setUsersError] = useState('');
-  const loadUsers = useCallback(() => {
-    adminApi.getUsers()
-      .then(res => { setUsersError(''); if (Array.isArray(res)) setUsersList(res); })
-      .catch(e => { setUsersError(e.message || 'Не удалось загрузить пользователей'); setUsersList([]); });
-  }, []);
-
+  // --- USERS --- the tab loads its own pages; here only the total for the tab counter
+  const [usersCount, setUsersCount] = useState(null);
   useEffect(() => {
-    if (isAdmin) loadUsers();
-  }, [isAdmin, loadUsers]);
-
-  const handleRoleChange = async (userId, newRole) => {
-    try {
-      const updated = await adminApi.updateUserRole(userId, newRole);
-      setUsersList(prev => prev.map(u => u.id === userId ? { ...u, role: updated.role } : u));
-      toast.show(`Роль пользователя обновлена на ${newRole}`, 'success');
-    } catch (err) {
-      toast.show(err.message || 'Ошибка изменения роли', 'warning');
-    }
-  };
-
-  const handleToggleBlock = async (userId, username, blocked) => {
-    const action = blocked ? 'заблокировать' : 'разблокировать';
-    if (!window.confirm(`${blocked ? 'Заблокировать' : 'Разблокировать'} пользователя "${username}"?`)) return;
-    try {
-      const updated = await adminApi.setUserBlocked(userId, blocked);
-      setUsersList(prev => prev.map(u => u.id === userId ? { ...u, is_blocked: updated.is_blocked } : u));
-      toast.show(`Пользователь "${username}" ${blocked ? 'заблокирован' : 'разблокирован'}`, 'success');
-    } catch (err) {
-      toast.show(err.message || `Не удалось ${action} пользователя`, 'warning');
-    }
-  };
-
-  const handleDeleteUser = async (userId, username) => {
-    if (!window.confirm(`Удалить пользователя "${username}" вместе с его вопросами и ответами? При следующем входе через ЭИОС аккаунт создастся заново — чтобы закрыть доступ, используйте блокировку.`)) return;
-    try {
-      await adminApi.deleteUser(userId);
-      setUsersList(prev => prev.filter(u => u.id !== userId));
-      toast.show(`Пользователь "${username}" успешно удалён из базы`, 'success');
-    } catch (err) {
-      toast.show(err.message || 'Ошибка удаления пользователя', 'warning');
-    }
-  };
+    if (!isAdmin) return;
+    adminApi.getUsers({ limit: 1 }).then(({ total }) => setUsersCount(total)).catch(() => {});
+  }, [isAdmin]);
 
   // ============================================================
   // ANNOUNCEMENTS — fully server-side, no localStorage
@@ -369,22 +329,35 @@ const AdminPanel = () => {
   };
 
   // ============================================================
-  // FORUM MODERATION — load from API
+  // FORUM MODERATION — threads page by page, deletion through the API
   // ============================================================
+  const FORUM_PAGE = 50;
   const [forumQuestions, setForumQuestions] = useState([]);
+  const [forumTotal, setForumTotal] = useState(null);
+
+  const loadForum = useCallback((offset = 0) => {
+    adminApi.getForumPage(FORUM_PAGE, offset)
+      .then(({ items, total }) => {
+        setForumQuestions(prev => (offset === 0 ? items : [...prev, ...items]));
+        setForumTotal(total ?? items.length);
+      })
+      .catch(e => toast.show(e.message || 'Не удалось загрузить темы форума', 'warning'));
+  }, []);
 
   useEffect(() => {
-    if (!isAdmin) return;
-    import('../services/api').then(({ forumApi }) => {
-      forumApi.getQuestions().then(res => {
-        if (Array.isArray(res)) setForumQuestions(res);
-      }).catch(() => {});
-    });
-  }, [isAdmin]);
+    if (isAdmin) loadForum(0);
+  }, [isAdmin, loadForum]);
 
-  const handleDeleteForumQuestion = (id) => {
-    // Forum delete via API not implemented yet — show informative message
-    toast.show('Удаление тем форума через API в разработке. Используйте БД напрямую.', 'info');
+  const handleDeleteForumQuestion = async (q) => {
+    if (!window.confirm(`Удалить тему «${q.title}» вместе с ответами?`)) return;
+    try {
+      await forumApi.deleteQuestion(q.id);
+      setForumQuestions(prev => prev.filter(item => item.id !== q.id));
+      setForumTotal(prev => (prev ? prev - 1 : prev));
+      toast.show('Тема удалена', 'success');
+    } catch (err) {
+      toast.show(err.message || 'Не удалось удалить тему', 'warning');
+    }
   };
 
   if (!isAdmin) return null;
@@ -395,8 +368,8 @@ const AdminPanel = () => {
     { id: 'teachers', label: 'Преподаватели', count: teachers.length },
     { id: 'subjects', label: 'Предметы', count: subjects.length },
     { id: 'faq', label: 'FAQ', count: faqItems.length },
-    { id: 'forum', label: 'Модерация форума', count: forumQuestions.length },
-    { id: 'users', label: 'Пользователи', count: usersList.length },
+    { id: 'forum', label: 'Модерация форума', count: forumTotal },
+    { id: 'users', label: 'Пользователи', count: usersCount },
   ];
 
   // WAI-ARIA tabs: arrows / Home / End move between tabs, Tab moves into the panel
@@ -840,8 +813,10 @@ const AdminPanel = () => {
         <section {...panelProps('forum')}>
           <Toolbar
             title="Модерация форума"
-            description="Просмотр всех тем форума. Данные загружаются из базы данных в реальном времени."
-          />
+            description="Все темы форума, закреплённые — первыми. Удалённая тема исчезает вместе с ответами."
+          >
+            <RefreshButton onClick={() => loadForum(0)} />
+          </Toolbar>
 
           <div className="admin-list">
             {forumQuestions.length === 0 ? (
@@ -871,7 +846,7 @@ const AdminPanel = () => {
                         <RowActions
                           label={q.title}
                           deleteLabel="Удалить тему"
-                          onDelete={() => handleDeleteForumQuestion(q.id)}
+                          onDelete={() => handleDeleteForumQuestion(q)}
                         />
                       </td>
                     </tr>
@@ -879,110 +854,18 @@ const AdminPanel = () => {
                 </tbody>
               </table>
             )}
+            {forumTotal > forumQuestions.length && (
+              <button type="button" className="btn btn-secondary btn-sm admin-more" onClick={() => loadForum(forumQuestions.length)}>
+                Показать ещё ({forumTotal - forumQuestions.length})
+              </button>
+            )}
           </div>
         </section>
       )}
 
       {/* USERS & ROLES TAB */}
       {activeTab === 'users' && (
-        <section {...panelProps('users')}>
-          <Toolbar
-            title="Управление ролями пользователей"
-            description={isMainAdmin
-              ? 'Назначайте права Администратора или Модератора студентам и сотрудникам, которые хоть раз входили через ЭИОС.'
-              : 'Назначайте Модераторов. Права Администратора выдаёт и снимает только Главный Администратор.'}
-          >
-            <RefreshButton onClick={loadUsers} />
-          </Toolbar>
-
-          <div className="admin-list">
-            {usersError ? (
-              <LoadError message={usersError} onRetry={loadUsers} />
-            ) : usersList.length === 0 ? (
-              <p className="admin-empty">Нет зарегистрированных пользователей.</p>
-            ) : (
-              <table className="admin-table">
-                <caption className="visually-hidden">Пользователи портала</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Пользователь</th>
-                    <th scope="col">Группа</th>
-                    <th scope="col">Роль</th>
-                    <th scope="col" className="admin-cell-controls"><span className="visually-hidden">Действия</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usersList.map(u => {
-                    const isSuperAdmin = u.auth_source === 'local';
-                    const isSelf = user && u.id === user.id;
-                    // Other administrators are managed by the main administrator only (the server checks it too)
-                    const otherAdmin = u.role === 'admin' && !isMainAdmin;
-                    const locked = isSuperAdmin || isSelf || otherAdmin;
-                    return (
-                      <tr key={u.id}>
-                        <td className="admin-cell-main">
-                          <div className="admin-cell-head">
-                            <span className="admin-cell-title">{u.full_name || u.username}</span>
-                            {isSuperAdmin && <span className="badge badge-accent">Главный Админ</span>}
-                            {u.is_blocked && <span className="badge badge-danger">Заблокирован</span>}
-                            {isSelf && <span className="badge">Это вы</span>}
-                          </div>
-                          <p className="admin-cell-sub">Логин: {u.username}</p>
-                        </td>
-                        <td className={`admin-cell-meta${u.group_number ? '' : ' admin-cell-muted'}`} data-label="Группа">
-                          {u.group_number || 'Не указана'}
-                        </td>
-                        <td className="admin-cell-role" data-label="Роль">
-                          {locked ? (
-                            <span className="admin-role-fixed" title={otherAdmin ? 'Права администратора меняет только Главный Администратор' : 'Роль этого пользователя нельзя изменить'}>
-                              <Lock {...ICON} />
-                              {isSuperAdmin ? 'Администратор ИВИТШ' : (ROLE_LABELS[u.role] || u.role)}
-                              <span className="visually-hidden">, роль нельзя изменить</span>
-                            </span>
-                          ) : (
-                            <select
-                              className="select admin-role-select"
-                              aria-label={`Роль пользователя ${u.username}`}
-                              value={u.role}
-                              onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                            >
-                              <option value="student">{ROLE_LABELS.student}</option>
-                              <option value="moderator">{ROLE_LABELS.moderator}</option>
-                              {isMainAdmin && <option value="admin">{ROLE_LABELS.admin}</option>}
-                            </select>
-                          )}
-                        </td>
-                        <td className="admin-cell-controls">
-                          {!locked && (
-                            <div className="admin-controls">
-                              <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                onClick={() => handleToggleBlock(u.id, u.username, !u.is_blocked)}
-                                title={u.is_blocked ? 'Разблокировать пользователя' : 'Заблокировать пользователя'}
-                              >
-                                {u.is_blocked ? <LockOpen {...ICON} /> : <Lock {...ICON} />}
-                                {u.is_blocked ? 'Разблокировать' : 'Заблокировать'}
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-danger btn-sm"
-                                onClick={() => handleDeleteUser(u.id, u.username)}
-                                title="Удалить пользователя"
-                              >
-                                <Trash2 {...ICON} /> Удалить
-                              </button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </section>
+        <AdminUsers panelProps={panelProps('users')} onCount={setUsersCount} />
       )}
 
     </div>

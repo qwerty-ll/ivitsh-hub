@@ -126,7 +126,7 @@ export const ProfileContacts = () => {
         </p>
         <div className="profile-contacts-grid">
           {field('vk_url', 'contact-vk', 'ВКонтакте', 'vk.com/id…')}
-          {field('max_contact', 'contact-max', 'Max', 'Ссылка или ник')}
+          {field('max_contact', 'contact-max', 'Max', 'Телефон, ник или max.ru/…')}
         </div>
         {error && <p className="field-error" role="alert">{error}</p>}
         <div>

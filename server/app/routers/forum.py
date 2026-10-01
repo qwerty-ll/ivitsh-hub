@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
@@ -18,6 +18,7 @@ _MAX_SEARCH_LEN = 200
 
 @router.get("/questions", response_model=List[schemas.ForumQuestionResponse])
 def get_forum_questions(
+    response: Response,
     category: Optional[str] = Query(None),
     search: Optional[str] = Query(None, max_length=_MAX_SEARCH_LEN),
     author_id: Optional[int] = Query(None),
@@ -39,6 +40,8 @@ def get_forum_questions(
             (models.ForumQuestion.content.ilike(f"%{safe_search}%", escape="\\"))
         )
 
+    # How many match in all, for paging and honest counters
+    response.headers["X-Total-Count"] = str(query.count())
     questions = (
         query
         .order_by(models.ForumQuestion.is_pinned.desc(), models.ForumQuestion.created_at.desc())

@@ -39,6 +39,29 @@ services:
     networks:
       - portal_network
 
+  # Nightly pg_dump and an archive of the uploaded files into infrastructure/backups (see DEPLOYMENT_GUIDE.md)
+  backup:
+    image: postgres:16-alpine
+    container_name: ivitsh_portal_backup
+    restart: always
+    environment:
+      PGHOST: db
+      PGDATABASE: ${POSTGRES_DB:-portal_db}
+      PGUSER: ${POSTGRES_USER:-portal_user}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      BACKUP_HOUR: ${BACKUP_HOUR:-00}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - backend_data:/app/data:ro
+      - ./backups:/backups
+      - ./docker/backup.sh:/usr/local/bin/portal-backup.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/portal-backup.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - portal_network
+
   client:
     build:
       context: ..

@@ -124,6 +124,12 @@ docker compose -f infrastructure/docker-compose.yml up -d --build
 Студенты входят через ЭИОС КГУ. Чтобы закрыть студенту доступ, используйте **блокировку**:
 удалённый аккаунт создаётся заново при следующем входе через ЭИОС.
 
+**Удаление** обезличивает учётную запись: ФИО, логин, группа, контакты, фото, личные задачи и ручные записи ПГАС
+стираются, членство в объединениях и будущие записи снимаются, неполученные заказы отменяются, а история (выданные
+заказы, брони, посещаемость, вопросы на форуме) остаётся под именем «Удалённый пользователь». Полностью стереть такую
+запись вместе с историей можно отдельной кнопкой «Стереть полностью» (фильтр «Удалённые» на вкладке «Пользователи»).
+Смена ролей, блокировки, удаления, назначение руководителей и ручные начисления бит пишутся в «Журнал действий».
+
 ---
 
 ## 5. База данных
@@ -131,7 +137,12 @@ docker compose -f infrastructure/docker-compose.yml up -d --build
 - PostgreSQL 16 в томе `postgres_data`.
 - Миграции: `server/migrations/`. Вручную: `docker exec ivitsh_portal_backend python -m app.db.migrate`.
   Новая миграция при разработке: `cd server && alembic revision --autogenerate -m "описание"`.
-- Резервная копия:
+- **Резервные копии по расписанию** делает сервис `backup` (`infrastructure/docker/backup.sh`): при старте и
+  затем каждую ночь в `BACKUP_HOUR` (UTC, по умолчанию `00` = 03:00 МСК) — `pg_dump` базы (`db_*.dump`) и архив
+  загруженных файлов (`uploads_*.tgz`) в `infrastructure/backups/`; копии старше `BACKUP_KEEP_DAYS` (14) удаляются.
+  Каталог `infrastructure/backups/` стоит регулярно копировать на другой сервер или диск.
+  Восстановление базы: `docker exec -i ivitsh_portal_db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' < infrastructure/backups/db_<дата>.dump`.
+- Разовая копия вручную:
   ```bash
   docker exec ivitsh_portal_db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > backup_$(date +%Y%m%d).sql
   ```

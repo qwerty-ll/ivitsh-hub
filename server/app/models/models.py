@@ -17,13 +17,14 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=True)
     full_name = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
-    role = Column(String, default="student")  # "student" | "curator" | "moderator" | "admin"
+    role = Column(String, default="student")  # "student" | "moderator" | "admin"
     group_number = Column(String, nullable=True)
     # EIOS idGroup of group_number, set only when EIOS itself reported the group; used for the timetable.
     eios_group_id = Column(Integer, nullable=True)
     # Stable user ID returned by EIOS; binds the local account to one EIOS identity.
     sdo_id = Column(String, nullable=True)
-    # "eios" for accounts created by EIOS SSO, "local" for the env-configured administrator.
+    # "eios" for accounts created by EIOS SSO, "local" for the env-configured administrator,
+    # "deleted" for an anonymized account kept so its orders, bookings and forum posts stay.
     auth_source = Column(String, nullable=False, default="eios", server_default="eios")
     is_blocked = Column(Boolean, nullable=False, default=False, server_default=false())
     # Profile picture URL reported by EIOS, refreshed on every login.
@@ -614,3 +615,18 @@ class ShopOrder(Base):
 
     user = relationship("User", foreign_keys=[user_id])
     item = relationship("ShopItem")
+
+
+class AdminAction(Base):
+    """Who changed a role, blocked, anonymized or erased an account, appointed a leader: the admin journal."""
+    __tablename__ = "admin_actions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    actor_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    # Names as they were at the time: the accounts may change or go
+    actor_name = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    target_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    target_name = Column(String, nullable=True)
+    details = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, index=True)

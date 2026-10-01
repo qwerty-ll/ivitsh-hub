@@ -92,6 +92,8 @@ coverage/
 infrastructure/certs/*
 !infrastructure/certs/README.md
 infrastructure/certbot-www/
+# Nightly database and file copies (infrastructure/docker/backup.sh)
+infrastructure/backups/
 infrastructure/gigachat-ca/
 *.pem
 # Public CA certificates of the Russian Ministry of Digital Development, used for GigaChat

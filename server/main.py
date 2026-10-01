@@ -7,6 +7,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.exc import DataError
 
 from app.core.config import settings
 from app.core import security
@@ -69,6 +71,27 @@ app = FastAPI(
 )
 
 _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+# Primary keys are 32-bit integers in PostgreSQL; a larger id cannot exist
+_MAX_DB_ID = 2_147_483_647
+_NOT_FOUND = {"detail": "Не найдено"}
+
+
+@app.middleware("http")
+async def reject_impossible_ids(request: Request, call_next):
+    """A numeric path segment beyond any database id is a 404, not a driver overflow (500)."""
+    if request.url.path.startswith("/api/") and any(
+        part.isascii() and part.isdigit() and (len(part) > 10 or int(part) > _MAX_DB_ID) for part in request.url.path.split("/")
+    ):
+        return JSONResponse(status_code=404, content=_NOT_FOUND)
+    return await call_next(request)
+
+
+@app.exception_handler(OverflowError)
+@app.exception_handler(DataError)
+async def out_of_range_value(request: Request, exc: Exception):
+    # A huge number in a query string or a body (SQLite: OverflowError, PostgreSQL: DataError)
+    logger.warning("Out-of-range value in %s %s: %s", request.method, request.url.path, type(exc).__name__)
+    return JSONResponse(status_code=400, content={"detail": "Некорректное значение в запросе"})
 
 
 @app.middleware("http")
@@ -127,3 +150,17 @@ app.include_router(shop.router)
 def health_check():
     """Liveness probe; intentionally does not touch the database."""
     return {"status": "ok", "service": "IVITSH Portal Backend API"}
+
+
+@app.get("/api/v1/health/ready")
+def readiness_check():
+    """Readiness probe for Docker and monitoring: the API can reach its database."""
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("Readiness check: database is unreachable")
+        return JSONResponse(status_code=503, content={"status": "unavailable", "database": "down"})
+    finally:
+        db.close()
+    return {"status": "ok", "database": "ok"}
