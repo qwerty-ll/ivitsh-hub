@@ -172,6 +172,13 @@ export const forumApi = {
     if (authorId !== null) query.append('author_id', authorId);
     return apiFetch(`/api/v1/forum/questions?${query.toString()}`);
   },
+  // A page of threads with the total for the filter: { items, total }
+  getPage: (category = '', search = '', limit = 50, offset = 0) => {
+    const query = new URLSearchParams({ limit, offset });
+    if (category) query.append('category', category);
+    if (search) query.append('search', search);
+    return apiFetch(`/api/v1/forum/questions?${query.toString()}`, { withTotal: true });
+  },
   createQuestion: (data) =>
     apiFetch('/api/v1/forum/questions', json('POST', data)),
   getQuestionDetail: (id) =>

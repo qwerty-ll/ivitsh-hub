@@ -110,7 +110,8 @@ def _compute(db: Session, t: models.Tournament) -> Dict:
     tribes = db.query(models.Tribe).filter(models.Tribe.tournament_id == t.id).order_by(models.Tribe.id).all()
     members = (
         db.query(models.TribeMember.user_id, models.TribeMember.tribe_id, models.TribeMember.joined_at,
-                 models.User.full_name, models.User.group_number)
+                 models.User.full_name, models.User.group_number, models.User.photo_name, models.User.avatar_url,
+                 models.User.photo_public, models.User.auth_source)
         .join(models.User, models.TribeMember.user_id == models.User.id)
         .filter(models.TribeMember.tournament_id == t.id)
         .all()
@@ -121,7 +122,7 @@ def _compute(db: Session, t: models.Tournament) -> Dict:
     )
     today = timetable.msk_now().date()
     spans = {}
-    for uid, _, joined_at, _, _ in members:
+    for uid, _, joined_at, *_ in members:
         joined = progress._as_utc(joined_at).astimezone(timetable.MSK).date() if joined_at else t.starts_on
         spans[uid] = (max(t.starts_on, joined), min(t.ends_on, today))
     earned = progress.earned_between_many(db, spans)
@@ -130,7 +131,7 @@ def _compute(db: Session, t: models.Tournament) -> Dict:
     for a in awards:
         award_sum[a.tribe_id] += a.points
     by_tribe: Dict[int, List] = defaultdict(list)
-    for uid, tribe_id, _, name, group in members:
+    for uid, tribe_id, *_ in members:
         by_tribe[tribe_id].append(uid)
     rows = []
     for tribe in tribes:
@@ -156,8 +157,9 @@ def _compute(db: Session, t: models.Tournament) -> Dict:
     return {
         "status": t.status,
         "tribes": rows,
-        # [user id, tribe id, full name, group, points]
-        "people": [[uid, tribe_id, name, group, earned[uid]] for uid, tribe_id, _, name, group in members],
+        # [user id, tribe id, full name, group, points, photo]
+        "people": [[uid, tribe_id, name, group, earned[uid], models.User.public_photo(uid, photo, avatar, public, source)]
+                   for uid, tribe_id, _, name, group, photo, avatar, public, source in members],
         # [tribe id, points, reason, when] — the latest ones
         "awards": [[a.tribe_id, a.points, a.reason, progress._as_utc(a.created_at).isoformat() if a.created_at else None]
                    for a in awards[:30]],
@@ -211,7 +213,7 @@ def add_member(t: models.Tournament, tribe_id: int, user: models.User) -> None:
     if hit is None:
         return
     snapshot = dict(hit[1])
-    snapshot["people"] = hit[1]["people"] + [[user.id, tribe_id, user.full_name, user.group_number, 0]]
+    snapshot["people"] = hit[1]["people"] + [[user.id, tribe_id, user.full_name, user.group_number, 0, user.photo_url]]
     rows = [dict(r) for r in hit[1]["tribes"]]
     for r in rows:
         if r["id"] == tribe_id:

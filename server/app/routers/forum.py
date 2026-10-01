@@ -9,6 +9,7 @@ import app.models as models
 import app.schemas as schemas
 import app.core.security as security
 from app.core import rate_limit
+from app.services.people import photo_for
 
 router = APIRouter(prefix="/api/v1/forum", tags=["Forum"])
 
@@ -89,6 +90,7 @@ def get_forum_questions(
             id=q.id,
             author_id=q.author_id,
             author_name=q.author.full_name if q.author else "Студент",
+            author_photo_url=photo_for(current_user, q.author),
             title=q.title,
             category=q.category,
             content=q.content,
@@ -123,6 +125,7 @@ def create_question(
         id=new_q.id,
         author_id=new_q.author_id,
         author_name=current_user.full_name,
+        author_photo_url=photo_for(current_user, current_user),
         title=new_q.title,
         category=new_q.category,
         content=new_q.content,
@@ -171,6 +174,7 @@ def get_question_detail(
         id=q.id,
         author_id=q.author_id,
         author_name=q.author.full_name if q.author else "Студент",
+        author_photo_url=photo_for(current_user, q.author),
         title=q.title,
         category=q.category,
         content=q.content,
@@ -188,6 +192,7 @@ def get_question_answers(
     question_id: int,
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    current_user: Optional[models.User] = Depends(security.get_current_user),
     db: Session = Depends(get_db)
 ):
     answers = (
@@ -205,6 +210,7 @@ def get_question_answers(
             question_id=a.question_id,
             author_id=a.author_id,
             author_name=a.author.full_name if a.author else "Студент",
+            author_photo_url=photo_for(current_user, a.author),
             content=a.content,
             is_solution=a.is_solution,
             created_at=a.created_at
@@ -239,6 +245,7 @@ def post_answer(
         question_id=new_ans.question_id,
         author_id=new_ans.author_id,
         author_name=current_user.full_name,
+        author_photo_url=photo_for(current_user, current_user),
         content=new_ans.content,
         is_solution=False,
         created_at=new_ans.created_at

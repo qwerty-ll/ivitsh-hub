@@ -50,9 +50,9 @@ PHOTO_SIDE = 512
 def _user_response(user: models.User) -> schemas.UserResponse:
     response = schemas.UserResponse.model_validate(user)
     response.userpictureurl = user.avatar_url
-    if user.photo_name:
-        # The stored name changes with every upload: a new photo is a new address for the browser cache
-        response.photo_url = f"/api/v1/auth/me/photo?v={user.photo_name[:12]}"
+    # Their own uploaded photo (seen by them even when hidden from others); the EIOS one is userpictureurl.
+    # The stored name changes with every upload: a new photo is a new address for the browser cache.
+    response.photo_url = user.own_photo_url
     return response
 
 
@@ -266,6 +266,8 @@ def update_my_profile(
         value = getattr(req, field)
         if value is not None:
             setattr(current_user, field, value or None)
+    if req.photo_public is not None:
+        current_user.photo_public = req.photo_public
     db.commit()
     db.refresh(current_user)
     return _user_response(current_user)
@@ -278,7 +280,8 @@ async def upload_my_photo(
     current_user: models.User = Depends(security.require_current_user),
     db: Session = Depends(get_db),
 ):
-    """The profile photo, kept on the server so it follows the user to every device. Only they see it."""
+    """The profile photo, kept on the server so it follows the user to every device. Signed-in students see
+    it next to the person's name unless they hid it (photo_public)."""
     uploads.check_declared_size(request)
     stored, _, _ = await uploads.save(request.stream(), name, images_only=True, max_side=PHOTO_SIDE)
     old, current_user.photo_name = current_user.photo_name, stored

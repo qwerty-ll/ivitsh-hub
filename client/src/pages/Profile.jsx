@@ -36,7 +36,7 @@ const handleTabsKeyDown = (e, ids, current, select, idPrefix) => {
 };
 
 const Profile = () => {
-  const { user, isLoggedIn, login, adminLogin, logout, setPhoto, sessionExpired } = useAuth();
+  const { user, isLoggedIn, login, adminLogin, logout, setPhoto, setPhotoPublic, sessionExpired } = useAuth();
   const toast = useToast();
 
   // Login form states
@@ -406,8 +406,21 @@ const Profile = () => {
                 </button>
               )}
               <p id="profile-photo-hint" className="profile-photo-hint">
-                PNG, JPEG или WebP. Фото видно только вам — на всех ваших устройствах.
+                PNG, JPEG или WebP. Фото есть на всех ваших устройствах.
               </p>
+              <label className="profile-photo-public">
+                <input
+                  type="checkbox"
+                  checked={user.photoPublic !== false}
+                  onChange={e => {
+                    const visible = e.target.checked;
+                    setPhotoPublic(visible)
+                      .then(() => toast.show(visible ? 'Фото видно другим студентам' : 'Фото теперь видите только вы', 'success'))
+                      .catch(err => toast.show(err.message || 'Не удалось сохранить', 'warning'));
+                  }}
+                />
+                <span>Показывать моё фото другим студентам рядом с именем (форум, объединения, задачи)</span>
+              </label>
             </div>
 
             <button type="button" onClick={handleLogout} className="btn btn-secondary profile-logout">

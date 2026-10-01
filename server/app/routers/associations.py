@@ -117,6 +117,8 @@ def _person(user: models.User, with_contacts: bool) -> Dict:
         "group_number": user.group_number if with_contacts else None,
         "vk_url": user.vk_url if with_contacts else None,
         "max_contact": user.max_contact if with_contacts else None,
+        # Photos, like contacts, are for signed-in students only
+        "photo_url": user.photo_url if with_contacts else None,
     }
 
 

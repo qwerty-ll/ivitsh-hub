@@ -6,6 +6,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { forumApi } from '../services/api';
+import Avatar from '../components/Avatar';
 
 const ICON = { strokeWidth: 1.75 };
 
@@ -205,7 +206,10 @@ const QuestionDetail = () => {
       <article className="card qd-question" aria-labelledby="qd-title">
         <p className="qd-meta">
           <span className="badge">{question.category}</span>
-          <span className="qd-author">{formatAuthorName(question.author_name, question.author_username)}</span>
+          <span className="qd-author with-avatar">
+            <Avatar name={question.author_name} url={question.author_photo_url} size="xs" />
+            {formatAuthorName(question.author_name, question.author_username)}
+          </span>
           <time className="tabular cm-dot" dateTime={question.created_at}>{formatDate(question.created_at)}</time>
         </p>
         <h1 id="qd-title" className="qd-title">{question.title}</h1>
@@ -257,7 +261,10 @@ const QuestionDetail = () => {
               return (
                 <li key={reply.id} className={`qd-answer ${reply.is_solution ? 'is-solution' : ''}`}>
                   <p className="qd-meta">
-                    <span className="qd-author">{formatAuthorName(reply.author_name)}</span>
+                    <span className="qd-author with-avatar">
+                      <Avatar name={reply.author_name} url={reply.author_photo_url} size="xs" />
+                      {formatAuthorName(reply.author_name)}
+                    </span>
                     <time className="tabular cm-dot" dateTime={reply.created_at}>{formatDate(reply.created_at)}</time>
                     {reply.is_solution && (
                       <span className="badge badge-success qd-solution-badge">

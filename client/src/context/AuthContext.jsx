@@ -42,6 +42,8 @@ const toClientUser = (apiUser) => ({
   serverPhotoUrl: apiUser.userpictureurl || '',
   // The photo the user uploaded (kept on the server)
   customPhotoUrl: apiUser.photo_url || '',
+  // Whether other signed-in students see the photo next to the name
+  photoPublic: apiUser.photo_public !== false,
 });
 
 // photoUrl shown in the UI: the uploaded photo, else the EIOS picture
@@ -198,6 +200,18 @@ export const AuthProvider = ({ children }) => {
     saveUser(toClientUser(res));
   };
 
+  // Shows or hides the photo from other students: the switch moves at once, and back if the server refuses
+  const setPhotoPublic = async (visible) => {
+    const before = user;
+    saveUser({ ...user, photoPublic: visible });
+    try {
+      saveUser(toClientUser(await authApi.updateProfile({ photo_public: visible })));
+    } catch (err) {
+      saveUser(before);
+      throw err;
+    }
+  };
+
   const isLoggedIn = !!user;
   const isAdmin = user?.role === 'admin';
   const isMainAdmin = isAdmin && !!user?.mainAdmin;
@@ -208,6 +222,7 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider value={{
       user,
       setPhoto,
+      setPhotoPublic,
       sessionChecked,
       isLoggedIn,
       isAdmin,

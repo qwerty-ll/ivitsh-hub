@@ -31,6 +31,8 @@ class User(Base):
     avatar_url = Column(String, nullable=True)
     # A photo the user uploaded instead (UPLOAD_DIR); shown to them on every device
     photo_name = Column(String, nullable=True)
+    # Whether signed-in students see this person's photo next to their name (forum, members, tasks…)
+    photo_public = Column(Boolean, nullable=False, default=True, server_default=true())
     # When the student last agreed to personal data processing at sign-in, and to which text version
     pd_consent_at = Column(DateTime(timezone=True), nullable=True)
     pd_consent_version = Column(String, nullable=True)
@@ -43,6 +45,23 @@ class User(Base):
     # When the SDO (Moodle) course list was last fetched at sign-in
     sdo_synced_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+    @staticmethod
+    def public_photo(user_id, photo_name, avatar_url, photo_public, auth_source):
+        """What others see next to a person's name: the uploaded photo, else the EIOS one; None if hidden.
+        Takes plain columns so bulk queries (tribe standings) need not load whole users."""
+        if photo_public is False or auth_source == "deleted":
+            return None
+        return f"/api/v1/users/{user_id}/photo?v={photo_name[:12]}" if photo_name else avatar_url
+
+    @property
+    def own_photo_url(self):
+        """The photo the user uploaded, as an address of the portal (None when there is none)."""
+        return f"/api/v1/users/{self.id}/photo?v={self.photo_name[:12]}" if self.photo_name else None
+
+    @property
+    def photo_url(self):
+        return User.public_photo(self.id, self.photo_name, self.avatar_url, self.photo_public, self.auth_source)
 
     questions = relationship("ForumQuestion", back_populates="author", cascade="all, delete-orphan")
     answers = relationship("ForumAnswer", back_populates="author", cascade="all, delete-orphan")

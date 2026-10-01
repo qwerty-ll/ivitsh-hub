@@ -324,7 +324,7 @@ def test_zip_bombs_are_refused(uploader):
 
 # --- Profile photo kept on the server ---
 
-def test_profile_photo_is_stored_on_the_server_and_private(app, fake_eios, db):
+def test_profile_photo_is_stored_on_the_server(app, fake_eios, db):
     from PIL import Image
     import io
     student = login_student(app, fake_eios, avatar_url="https://sdo.kosgos.ru/pic.jpg")
@@ -333,14 +333,14 @@ def test_profile_photo_is_stored_on_the_server_and_private(app, fake_eios, db):
                      headers={**CSRF, "Content-Type": "image/jpeg"})
     assert r.status_code == 200, r.text
     me = r.json()
-    assert me["photo_url"].startswith("/api/v1/auth/me/photo?v=") and me["userpictureurl"] == "https://sdo.kosgos.ru/pic.jpg"
+    assert me["photo_url"].startswith("/api/v1/users/") and me["userpictureurl"] == "https://sdo.kosgos.ru/pic.jpg"
     # Another device (a new session) sees the same photo, shrunk to fit 512 px
     again = login_student(app, fake_eios, avatar_url="https://sdo.kosgos.ru/pic.jpg")
     assert again.get("/api/v1/auth/session").json()["user"]["photo_url"] == me["photo_url"]
     picture = Image.open(io.BytesIO(again.get(me["photo_url"]).content))
     assert max(picture.size) == 512
-    # Nobody else gets it; only pictures are accepted
-    assert TestClient(app).get("/api/v1/auth/me/photo").status_code == 401
+    # Guests do not get it; only pictures are accepted
+    assert TestClient(app).get(me["photo_url"]).status_code == 401
     assert student.post("/api/v1/auth/me/photo", params={"name": "me.pdf"}, content=b"%PDF-1.4\n%%EOF",
                         headers=CSRF).status_code == 415
     # A new photo replaces the old file; removing it goes back to the EIOS picture
@@ -350,7 +350,7 @@ def test_profile_photo_is_stored_on_the_server_and_private(app, fake_eios, db):
     import os
     assert not os.path.exists(os.path.join(settings.UPLOAD_DIR, stored))
     r = student.delete("/api/v1/auth/me/photo", headers=CSRF)
-    assert r.json()["photo_url"] is None and student.get("/api/v1/auth/me/photo").status_code == 404
+    assert r.json()["photo_url"] is None and student.get(me["photo_url"]).status_code == 404
 
 
 # --- Tribe standings: one computation serves the crowd ---
@@ -475,3 +475,41 @@ def test_admin_overview_counts_queues_and_courses(app, fake_eios, db):
     assert {c["course"]: c["total"] for c in data["students"]["by_course"]} == {1: 1, 3: 1}
     assert data["waiting"]["orders_new"] == 1 and data["waiting"]["forum_unanswered"] == 1
     assert login_student(app, fake_eios, "24-isbo-001", eios_id="1").get("/api/v1/admin/overview").status_code == 403
+
+
+# --- Photos are seen by other signed-in students, never by guests; anyone can hide theirs ---
+
+def test_other_students_see_a_photo_unless_it_is_hidden(app, fake_eios, db):
+    author = login_student(app, fake_eios, "24-isbo-001", eios_id="1", full_name="Автор Фото")
+    reader = login_student(app, fake_eios, "24-isbo-002", eios_id="2", full_name="Читатель Форума")
+    me = author.post("/api/v1/auth/me/photo", params={"name": "me.png"}, content=_upload_image(), headers=CSRF).json()
+    uid = _uid(db, "24-isbo-001")
+    assert me["photo_url"] == f"/api/v1/users/{uid}/photo?v=" + me["photo_url"].split("v=")[1] and me["photo_public"] is True
+    q = author.post("/api/v1/forum/questions", json={"title": "Где 108?", "content": "Подскажите, где коворкинг"}, headers=CSRF).json()
+    # Another student sees it next to the name and can load it
+    seen = reader.get(f"/api/v1/forum/questions/{q['id']}").json()["author_photo_url"]
+    assert seen == me["photo_url"] and reader.get(seen).status_code == 200
+    # A guest gets the name only and no picture
+    guest = TestClient(app)
+    assert guest.get(f"/api/v1/forum/questions/{q['id']}").json()["author_photo_url"] is None
+    assert guest.get(seen).status_code == 401
+    # Hidden: gone for others, still there for its owner
+    assert author.patch("/api/v1/auth/me", json={"photo_public": False}, headers=CSRF).json()["photo_public"] is False
+    assert reader.get(f"/api/v1/forum/questions/{q['id']}").json()["author_photo_url"] is None
+    assert reader.get(seen).status_code == 404
+    assert author.get(seen).status_code == 200
+    assert author.get(f"/api/v1/forum/questions/{q['id']}").json()["author_photo_url"] == me["photo_url"]
+
+
+def test_member_lists_show_photos_to_signed_in_people(app, fake_eios, db):
+    admin = login_admin(app)
+    aid = admin.post("/api/v1/admin/associations", json={"name": "Фотоклуб"}, headers=CSRF).json()["id"]
+    leader = login_student(app, fake_eios, "24-isbo-001", eios_id="1", full_name="Смирнов Макар",
+                           avatar_url="https://sdo.kosgos.ru/pic/1.jpg")
+    admin.put(f"/api/v1/admin/associations/{aid}/leaders/{_uid(db, '24-isbo-001')}", headers=CSRF)
+    student = login_student(app, fake_eios, "24-isbo-002", eios_id="2")
+    in_catalog = next(a for a in student.get("/api/v1/associations").json() if a["id"] == aid)["leaders"][0]
+    assert in_catalog["photo_url"] == "https://sdo.kosgos.ru/pic/1.jpg"  # the EIOS photo when none was uploaded
+    anonymous = next(a for a in TestClient(app).get("/api/v1/associations").json() if a["id"] == aid)["leaders"][0]
+    assert anonymous["photo_url"] is None
+    assert leader.get(f"/api/v1/associations/{aid}").json()["members"][0]["photo_url"] == "https://sdo.kosgos.ru/pic/1.jpg"

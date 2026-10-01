@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { adminApi } from '../../services/api';
 import { Toolbar, RefreshButton, ListSkeleton, LoadError, ICON } from './AdminUi';
+import Avatar from '../Avatar';
 
 const ROLE_LABELS = { student: 'Студент', moderator: 'Модератор', admin: 'Администратор' };
 const PAGE = 50;
@@ -216,6 +217,7 @@ const AdminUsers = ({ panelProps, onCount }) => {
                   <tr key={u.id} className={isDeleted ? 'admin-row-muted' : undefined}>
                     <td className="admin-cell-main">
                       <div className="admin-cell-head">
+                        <Avatar name={u.full_name || u.username} url={u.photo_url} />
                         <span className="admin-cell-title">{u.full_name || u.username}</span>
                         {isSuperAdmin && <span className="badge badge-accent">Главный Админ</span>}
                         {u.is_blocked && !isDeleted && <span className="badge badge-danger">Заблокирован</span>}

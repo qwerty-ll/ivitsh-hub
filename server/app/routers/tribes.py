@@ -80,8 +80,8 @@ def _auto_join(db: Session, t: models.Tournament, user: models.User, snapshot: D
 def view(db: Session, t: models.Tournament, user: models.User, snapshot: Optional[Dict] = None) -> Dict:
     table = snapshot or tribes_service.standings(db, t)
     by_tribe: Dict[int, list] = {}
-    for uid, tribe_id, name, group, pts in table["people"]:
-        by_tribe.setdefault(tribe_id, []).append((uid, name, group, pts))
+    for uid, tribe_id, name, group, pts, *rest in table["people"]:
+        by_tribe.setdefault(tribe_id, []).append((uid, name, group, pts, rest[0] if rest else None))
     mine_id = next((p[1] for p in table["people"] if p[0] == user.id), None)
     is_admin = user.role == "admin"
     rows = []
@@ -90,7 +90,8 @@ def view(db: Session, t: models.Tournament, user: models.User, snapshot: Optiona
         # The tribe's best contributor: its master for this tournament
         master = ranked[0][1] if ranked and ranked[0][3] > 0 else None
         shown = ranked if is_admin or mine_id == row["id"] else ranked[:TOP_SHOWN]
-        top = [{"full_name": name, "group_number": group, "points": pts} for _, name, group, pts in shown[:200]]
+        top = [{"full_name": name, "group_number": group, "points": pts, "photo_url": photo}
+               for _, name, group, pts, photo in shown[:200]]
         rows.append(dict(row) | {"master": master, "top": top})
     names = {r["id"]: r for r in table["tribes"]}
     my_points = my_rank = None

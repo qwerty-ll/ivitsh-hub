@@ -8,6 +8,7 @@ import { useToast } from '../context/ToastContext';
 import { tribesApi } from '../services/api';
 import { bits } from '../components/Progress';
 import { plural } from '../utils/plural';
+import Avatar from '../components/Avatar';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 const DEFAULT_NAMES = ['Альфа', 'Бета', 'Гамма', 'Дельта', 'Эпсилон', 'Зета', 'Эта', 'Тета'];
@@ -41,7 +42,7 @@ const TribeRow = ({ tribe, leader, mine, open, onToggle }) => (
         {tribe.top.length === 0 ? <li className="task-optional">Пока никто не набрал очков.</li> : tribe.top.map((p, i) => (
           <li key={`${p.full_name}-${i}`}>
             <span className="tabular tribe-top-n">{i + 1}</span>
-            <span className="tribe-top-name">{p.full_name}</span>
+            <span className="tribe-top-name with-avatar"><Avatar name={p.full_name} url={p.photo_url} size="xs" />{p.full_name}</span>
             {p.group_number && <span className="task-optional tabular">{p.group_number}</span>}
             <span className="tabular tribe-top-points">{p.points}</span>
           </li>

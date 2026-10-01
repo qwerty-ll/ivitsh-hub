@@ -15,6 +15,7 @@ import app.schemas as schemas
 import app.core.security as security
 from app.core import rate_limit
 from app.routers.associations import is_leader, require_manager
+from app.services.people import photo_for
 from app.services import uploads
 
 router = APIRouter(prefix="/api/v1", tags=["Tasks"])
@@ -102,6 +103,7 @@ def _assignee_item(a: models.TaskAssignee) -> Dict:
         "completed_at": a.completed_at,
         "vk_url": a.user.vk_url,
         "max_contact": a.user.max_contact,
+        "photo_url": a.user.photo_url,
     }
 
 
@@ -126,6 +128,7 @@ def _detail(db: Session, task: models.Task, user: models.User) -> Dict:
                 "id": c.id,
                 "author_id": c.author_id,
                 "author_name": c.author.full_name,
+                "author_photo_url": photo_for(user, c.author),
                 "text": c.text,
                 "created_at": c.created_at,
                 "can_delete": manage or c.author_id == user.id,
@@ -439,6 +442,7 @@ def add_comment(
         "id": comment.id,
         "author_id": user.id,
         "author_name": user.full_name,
+        "author_photo_url": photo_for(user, user),
         "text": comment.text,
         "created_at": comment.created_at,
         "can_delete": True,

@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { associationsApi, tasksApi } from '../services/api';
 import { COLORS, STATUSES, STATUS_LABEL, dueInfo, fromLocalInput, toLocalInput } from '../utils/tasks';
+import Avatar from '../components/Avatar';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 const when = (iso) => (iso ? new Date(iso).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '');
@@ -259,7 +260,9 @@ const TaskDetail = () => {
                 {task.comments.map(c => (
                   <li key={c.id} className={`task-comment ${c.author_id === user?.id ? 'is-mine' : ''}`}>
                     <p className="task-comment-head">
-                      <span className="task-comment-author">{c.author_name}</span>
+                      <span className="task-comment-author with-avatar">
+                        <Avatar name={c.author_name} url={c.author_photo_url} size="xs" />{c.author_name}
+                      </span>
                       <span className="task-optional">{when(c.created_at)}</span>
                       {c.can_delete && (
                         <button type="button" className="btn btn-ghost btn-icon btn-sm" aria-label="Удалить комментарий" title="Удалить"
@@ -293,7 +296,7 @@ const TaskDetail = () => {
                   return (
                     <li key={a.user_id} className="task-assignee">
                       <div className="task-assignee-head">
-                        <span className="assoc-person-name">{a.full_name}</span>
+                        <span className="assoc-person-name"><Avatar name={a.full_name} url={a.photo_url} />{a.full_name}</span>
                         <span className={`badge task-status-badge task-status-${a.status}`}>{STATUS_LABEL[a.status]}</span>
                       </div>
                       <span className="assoc-person-meta">

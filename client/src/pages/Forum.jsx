@@ -9,6 +9,10 @@ import { useToast } from '../context/ToastContext';
 import { forumApi } from '../services/api';
 import SectionIcon from '../components/SectionIcon';
 import { plural } from '../utils/plural';
+import Avatar from '../components/Avatar';
+
+// Threads per page of the list
+const PAGE = 50;
 
 const ICON = { strokeWidth: 1.75 };
 const EASE = [0.16, 1, 0.3, 1];
@@ -29,22 +33,33 @@ const Forum = () => {
 
   // API-backed state — no localStorage
   const [questions, setQuestions] = useState([]);
+  // How many threads match in all (the list loads 50 at a time)
+  const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const askTriggerRef = useRef(null);
 
   const categories = ['Все', 'Учеба', 'Расписание', 'Общежитие', 'Стипендия', 'Организационное'];
 
+  const loadMore = () => {
+    setLoadingMore(true);
+    forumApi.getPage(selectedCategory !== 'Все' ? selectedCategory : '', searchQuery.trim(), PAGE, questions.length)
+      .then(({ items, total: count }) => {
+        setQuestions(prev => [...prev, ...items.filter(q => !prev.some(p => p.id === q.id))]);
+        if (count != null) setTotal(count);
+      })
+      .catch(() => toast.show('Не удалось загрузить ещё вопросы', 'warning'))
+      .finally(() => setLoadingMore(false));
+  };
+
   // ── Load questions from API ──────────────────────────────────────────────
   const loadQuestions = useCallback(() => {
     setLoading(true);
-    forumApi.getQuestions(
-      selectedCategory !== 'Все' ? selectedCategory : '',
-      searchQuery.trim(),
-      50
-    )
-      .then(res => {
-        if (Array.isArray(res)) setQuestions(res);
+    forumApi.getPage(selectedCategory !== 'Все' ? selectedCategory : '', searchQuery.trim(), PAGE)
+      .then(({ items, total: count }) => {
+        setQuestions(items);
+        setTotal(count ?? items.length);
       })
       .catch(err => {
         console.warn('[Forum] Failed to load questions:', err.message);
@@ -135,6 +150,7 @@ const Forum = () => {
       });
       // Normalise API response to UI shape
       setQuestions(prev => [normaliseQuestion(created), ...prev]);
+      setTotal(t => t + 1);
       setIsAskModalOpen(false);
       setNewTitle('');
       setNewText('');
@@ -155,6 +171,7 @@ const Forum = () => {
     try {
       await forumApi.deleteQuestion(id);
       setQuestions(prev => prev.filter(q => q.id !== id));
+      setTotal(t => Math.max(0, t - 1));
       toast.show('Вопрос удалён', 'info');
     } catch (err) {
       toast.show(err.message || 'Ошибка удаления вопроса', 'warning');
@@ -181,7 +198,7 @@ const Forum = () => {
       name: q.author_name || 'Студент',
       role: 'student',
       group: '',
-      photo: 'profile.png',
+      photo: q.author_photo_url || null,
     },
     text: q.content || '',
     rating: q.votes_count ?? 0,
@@ -301,8 +318,8 @@ const Forum = () => {
           <p className="forum-count" aria-live="polite">
             {loading ? 'Загружаем вопросы…' : normalisedQuestions.length > 0 && (
               <>
-                <span className="tabular">{normalisedQuestions.length}</span>{' '}
-                {plural(normalisedQuestions.length, ['вопрос', 'вопроса', 'вопросов'])}
+                <span className="tabular">{Math.max(total, normalisedQuestions.length)}</span>{' '}
+                {plural(Math.max(total, normalisedQuestions.length), ['вопрос', 'вопроса', 'вопросов'])}
                 {isFiltered ? ' по фильтру' : ''}
               </>
             )}
@@ -331,6 +348,7 @@ const Forum = () => {
             ))}
           </ul>
         ) : normalisedQuestions.length > 0 ? (
+          <>
           <ul className="forum-list">
             {normalisedQuestions.map((q) => {
               const canDelete = isOwnPost(q) || canModerate;
@@ -379,6 +397,7 @@ const Forum = () => {
                     {excerpt && <p className="forum-row-excerpt">{highlightText(excerpt, searchQuery)}</p>}
                     <p className="forum-row-meta">
                       <span className="forum-row-author">
+                        <Avatar name={q.author.name} url={q.author.photo} size="xs" />
                         {q.author.name}
                         {getRoleBadge(q.author.role)}
                       </span>
@@ -422,6 +441,12 @@ const Forum = () => {
               );
             })}
           </ul>
+          {total > questions.length && (
+            <button type="button" className="btn btn-secondary forum-more" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? 'Загружаем…' : `Показать ещё (${total - questions.length})`}
+            </button>
+          )}
+          </>
         ) : isFiltered ? (
           <div className="empty-state">
             <SearchX size={32} {...ICON} aria-hidden="true" />

@@ -63,6 +63,8 @@ class EiosLoginRequest(BaseModel):
 
 class UserUpdateProfile(BaseModel):
     group_number: Optional[str] = Field(None, max_length=50)
+    # Show my photo to other signed-in students
+    photo_public: Optional[bool] = None
     # None leaves a contact as is, "" clears it
     vk_url: Optional[str] = Field(None, max_length=100)
     max_contact: Optional[str] = Field(None, max_length=64)
@@ -88,8 +90,9 @@ class UserResponse(BaseModel):
     eios_group_id: Optional[int] = None
     email: Optional[str] = None
     userpictureurl: Optional[str] = None
-    # The photo the user uploaded (own profile only); userpictureurl is the EIOS one
+    # The uploaded photo: on one's own profile always; in lists, what others see (None when hidden)
     photo_url: Optional[str] = None
+    photo_public: bool = True
     auth_source: str = "eios"
     is_blocked: bool = False
     vk_url: Optional[str] = None
@@ -128,6 +131,7 @@ class ForumAnswerResponse(BaseModel):
     question_id: int
     author_id: int
     author_name: str
+    author_photo_url: Optional[str] = None
     content: str
     is_solution: bool
     created_at: datetime
@@ -143,6 +147,7 @@ class ForumQuestionResponse(BaseModel):
     id: int
     author_id: int
     author_name: str
+    author_photo_url: Optional[str] = None
     title: str
     category: str
     content: str
@@ -295,6 +300,8 @@ class PersonContacts(BaseModel):
     group_number: Optional[str] = None
     vk_url: Optional[str] = None
     max_contact: Optional[str] = None
+    # The person's photo for signed-in viewers (None when hidden or there is none)
+    photo_url: Optional[str] = None
 
 
 class MemberItem(PersonContacts):
@@ -489,6 +496,7 @@ class AssigneeItem(BaseModel):
     completed_at: Optional[UtcDateTime] = None
     vk_url: Optional[str] = None
     max_contact: Optional[str] = None
+    photo_url: Optional[str] = None
 
 
 class ManagedTask(BaseModel):
@@ -507,6 +515,7 @@ class CommentItem(BaseModel):
     id: int
     author_id: int
     author_name: str
+    author_photo_url: Optional[str] = None
     text: str
     created_at: Optional[UtcDateTime] = None
     can_delete: bool = False
@@ -814,6 +823,7 @@ class RegistrationItem(BaseModel):
     attended: Optional[bool] = None
     vk_url: Optional[str] = None
     max_contact: Optional[str] = None
+    photo_url: Optional[str] = None
 
 
 class FeedbackSummary(BaseModel):

@@ -68,7 +68,8 @@ def meeting_item(db: Session, meeting: models.Meeting, manage: bool) -> Dict:
             if user:
                 people[uid] = user
         item["attendance"] = [
-            {"user_id": u.id, "full_name": u.full_name, "group_number": u.group_number, "present": u.id in present}
+            {"user_id": u.id, "full_name": u.full_name, "group_number": u.group_number, "present": u.id in present,
+             "photo_url": u.photo_url}
             for u in sorted(people.values(), key=lambda u: u.full_name)
         ]
         item["attended_count"] = len(present)

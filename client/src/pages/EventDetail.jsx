@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { adminApi, associationsApi, eventsApi } from '../services/api';
 import { ROLE_LABEL, SOURCE_LABEL, eventWhen, isFull, isOver, organizerOf, seatsText } from '../utils/events';
+import Avatar from '../components/Avatar';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 
@@ -285,9 +286,9 @@ const Participants = ({ e, onChange }) => {
                 <label className="task-person">
                   <input type="checkbox" checked={present.has(r.user_id)}
                     onChange={() => setPresent(p => { const n = new Set(p); if (n.has(r.user_id)) n.delete(r.user_id); else n.add(r.user_id); return n; })} />
-                  <span>{r.full_name}</span>
+                  <span className="with-avatar"><Avatar name={r.full_name} url={r.photo_url} size="xs" />{r.full_name}</span>
                 </label>
-              ) : <span className="event-reg-name">{r.full_name}</span>}
+              ) : <span className="event-reg-name with-avatar"><Avatar name={r.full_name} url={r.photo_url} size="xs" />{r.full_name}</span>}
               <span className="assoc-person-meta">
                 {r.group_number && <span className="tabular">{r.group_number}</span>}
                 <label className="visually-hidden" htmlFor={`role-${r.user_id}`}>Роль: {r.full_name}</label>

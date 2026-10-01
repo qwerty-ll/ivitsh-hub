@@ -149,7 +149,7 @@ def detail(db: Session, event: models.Event, user: Optional[models.User]) -> Dic
             {
                 "user_id": r.user_id, "full_name": r.user.full_name, "group_number": r.user.group_number,
                 "role": r.role, "source": r.source, "attended": r.attended,
-                "vk_url": r.user.vk_url, "max_contact": r.user.max_contact,
+                "vk_url": r.user.vk_url, "max_contact": r.user.max_contact, "photo_url": r.user.photo_url,
             }
             for r in regs
         ]

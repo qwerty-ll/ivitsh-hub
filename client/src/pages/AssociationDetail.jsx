@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { associationsApi } from '../services/api';
 import { STATUS_BADGE, assocHue, monogram, plural } from '../utils/associations';
+import Avatar from '../components/Avatar';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 const formatDate = (iso) => (iso ? new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '');
@@ -20,6 +21,7 @@ const PersonRow = ({ person, children }) => (
   <li className="assoc-person">
     <div className="assoc-person-main">
       <span className="assoc-person-name">
+        <Avatar name={person.full_name} url={person.photo_url} />
         {person.full_name}
         {person.role === 'leader' && <span className="badge badge-accent">Руководитель</span>}
       </span>
@@ -313,7 +315,7 @@ const AssociationDetail = () => {
               <ul className="assoc-leaders">
                 {data.leaders.map(l => (
                   <li key={l.user_id}>
-                    <span className="assoc-person-name">{l.full_name}</span>
+                    <span className="assoc-person-name"><Avatar name={l.full_name} url={l.photo_url} />{l.full_name}</span>
                     {isLoggedIn
                       ? <ContactLinks vk={l.vk_url} max={l.max_contact} name={l.full_name}
                           empty={<span className="assoc-muted">Контакты пока не указаны</span>} />

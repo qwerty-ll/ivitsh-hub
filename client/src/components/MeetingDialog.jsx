@@ -6,6 +6,7 @@ import MeetingForm from './MeetingForm';
 import { useToast } from '../context/ToastContext';
 import { meetingsApi } from '../services/api';
 import { dayTitle, dayKey, timeLabel } from '../utils/calendar';
+import Avatar from './Avatar';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 
@@ -40,7 +41,7 @@ const Attendance = ({ meeting, onSaved }) => {
           <li key={a.user_id}>
             <label className="task-person">
               <input type="checkbox" checked={present.has(a.user_id)} onChange={() => toggle(a.user_id)} />
-              <span>{a.full_name}</span>
+              <span className="with-avatar"><Avatar name={a.full_name} url={a.photo_url} size="xs" />{a.full_name}</span>
               {a.group_number && <span className="task-optional tabular">{a.group_number}</span>}
             </label>
           </li>

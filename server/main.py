@@ -16,7 +16,7 @@ from app.core import security, shared
 from app.db.database import MAX_CONNECTIONS, SessionLocal
 from app.db.migrate import STARTUP_LOCK, run_migrations
 import app.models as models
-from app.routers import auth, forum, chat, schedule, documents, admin, rooms, associations, tasks, posts, attachments, meetings, homework, calendar, events, achievements, booking, tribes, shop
+from app.routers import auth, forum, chat, schedule, documents, admin, rooms, associations, tasks, posts, attachments, meetings, homework, calendar, events, achievements, booking, tribes, shop, users
 
 logging.basicConfig(
     level=logging.INFO,
@@ -181,6 +181,7 @@ app.include_router(achievements.router)
 app.include_router(booking.router)
 app.include_router(tribes.router)
 app.include_router(shop.router)
+app.include_router(users.router)
 
 
 @app.get("/api/v1/health")

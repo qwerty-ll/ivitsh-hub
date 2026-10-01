@@ -380,3 +380,24 @@
   .page-heading { gap: var(--space-3); }
   .page-heading > .tile-lg { width: 2.5rem; height: 2.5rem; border-radius: var(--radius); }
 }
+
+/* ---------- A person's photo next to their name (initials when there is none) ---------- */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-weight: var(--weight-semibold);
+  vertical-align: middle;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.avatar-xs { width: 1.5rem; height: 1.5rem; font-size: 0.625rem; }
+.avatar-sm { width: 2rem; height: 2rem; font-size: var(--text-xs); }
+.avatar-md { width: 2.5rem; height: 2.5rem; font-size: var(--text-sm); }
+.avatar-initials { line-height: 1; letter-spacing: 0.02em; }
+/* A name with its photo on one line */
+.with-avatar { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; }
