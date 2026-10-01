@@ -232,3 +232,222 @@ def test_session_answers_guests_without_an_error(app, fake_eios, db):
     r = student.get("/api/v1/auth/session")
     assert r.status_code == 200 and r.json() == {"user": None}
     assert "portal_token=" in r.headers.get("set-cookie", "")
+
+
+# --- B6: uploads are checked beyond their first bytes ---
+
+def _upload_image(buf_format="PNG", size=(16, 16), exif=None):
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    kwargs = {"exif": exif} if exif is not None else {}
+    Image.new("RGB", size, "teal").save(buf, buf_format, **kwargs)
+    return buf.getvalue()
+
+
+def _zip(files):
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as archive:
+        for name, data in files.items():
+            archive.writestr(name, data)
+    return buf.getvalue()
+
+
+@pytest.fixture
+def uploader(app, fake_eios):
+    student = login_student(app, fake_eios)
+    task = student.post("/api/v1/tasks", json={"title": "Личное"}, headers=CSRF).json()
+
+    def up(name, body):
+        return student.post(f"/api/v1/tasks/{task['id']}/files", params={"name": name}, content=body,
+                            headers={**CSRF, "Content-Type": "application/octet-stream"})
+    return student, up
+
+
+def test_polyglot_picture_is_rewritten_without_its_payload(uploader):
+    student, up = uploader
+    polyglot = _upload_image() + b"<script>alert(1)</script><html>"
+    r = up("x.png", polyglot)
+    assert r.status_code == 201
+    body = student.get(f"/api/v1/attachments/{r.json()['id']}").content
+    assert body.startswith(b"\x89PNG") and b"<script>" not in body and r.json()["size"] == len(body)
+    # Not a picture at all, only its signature
+    assert up("fake.png", b"\x89PNG\r\n\x1a\n<script>alert(1)</script>").status_code == 415
+    # A JPEG under a PNG name
+    assert up("photo.png", _upload_image("JPEG")).status_code == 415
+
+
+def test_photo_geotags_are_stripped(uploader):
+    from PIL import Image
+    student, up = uploader
+    exif = Image.Exif()
+    exif[0x8825] = {2: (55.0, 45.0, 0.0)}  # GPS
+    exif[0x010F] = "PhoneMaker"
+    r = up("scan.jpg", _upload_image("JPEG", exif=exif.tobytes()))
+    assert r.status_code == 201
+    body = student.get(f"/api/v1/attachments/{r.json()['id']}").content
+    assert b"PhoneMaker" not in body and b"Exif" not in body
+
+
+def test_pdf_must_be_whole_and_without_scripts(uploader):
+    _, up = uploader
+    assert up("ok.pdf", b"%PDF-1.4\n1 0 obj<<>>endobj\n%%EOF\n").status_code == 201
+    assert up("cut.pdf", b"%PDF-1.4\n1 0 obj<<>>endobj\n").status_code == 415
+    assert up("js.pdf", b"%PDF-1.4\n1 0 obj<</OpenAction<</S/JavaScript/JS(app.alert(1))>>>>endobj\n%%EOF").status_code == 415
+    assert up("run.pdf", b"%PDF-1.4\n1 0 obj<</S/Launch/F(cmd.exe)>>endobj\n%%EOF").status_code == 415
+
+
+def test_office_files_and_archives_are_opened(uploader):
+    _, up = uploader
+    assert up("plan.docx", _zip({"[Content_Types].xml": "<Types/>", "word/document.xml": "<w/>"})).status_code == 201
+    assert up("macro.docx", _zip({"[Content_Types].xml": "<Types/>", "word/vbaProject.bin": "x"})).status_code == 415
+    assert up("fake.docx", _zip({"readme.txt": "hi"})).status_code == 415
+    assert up("broken.zip", b"PK\x03\x04garbage").status_code == 415
+    assert up("photos.zip", _zip({"a/1.jpg": "x", "b/notes.txt": "x"})).status_code == 201
+    assert up("setup.zip", _zip({"docs/readme.txt": "x", "setup.EXE": "MZ"})).status_code == 415
+    assert up("page.zip", _zip({"index.html": "<script>"})).status_code == 415
+    assert up("slip.zip", _zip({"../../etc/cron.d/x": "x"})).status_code == 415
+
+
+def test_zip_bombs_are_refused(uploader):
+    import io
+    import zipfile
+    _, up = uploader
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as archive:
+        for i in range(3):
+            archive.writestr(f"part{i}.bin", b"\0" * (200 * 1024 * 1024))
+    assert up("bomb.zip", buf.getvalue()).status_code == 415
+
+
+# --- Profile photo kept on the server ---
+
+def test_profile_photo_is_stored_on_the_server_and_private(app, fake_eios, db):
+    from PIL import Image
+    import io
+    student = login_student(app, fake_eios, avatar_url="https://sdo.kosgos.ru/pic.jpg")
+    big = _upload_image("JPEG", size=(1600, 1200))
+    r = student.post("/api/v1/auth/me/photo", params={"name": "me.jpg"}, content=big,
+                     headers={**CSRF, "Content-Type": "image/jpeg"})
+    assert r.status_code == 200, r.text
+    me = r.json()
+    assert me["photo_url"].startswith("/api/v1/auth/me/photo?v=") and me["userpictureurl"] == "https://sdo.kosgos.ru/pic.jpg"
+    # Another device (a new session) sees the same photo, shrunk to fit 512 px
+    again = login_student(app, fake_eios, avatar_url="https://sdo.kosgos.ru/pic.jpg")
+    assert again.get("/api/v1/auth/session").json()["user"]["photo_url"] == me["photo_url"]
+    picture = Image.open(io.BytesIO(again.get(me["photo_url"]).content))
+    assert max(picture.size) == 512
+    # Nobody else gets it; only pictures are accepted
+    assert TestClient(app).get("/api/v1/auth/me/photo").status_code == 401
+    assert student.post("/api/v1/auth/me/photo", params={"name": "me.pdf"}, content=b"%PDF-1.4\n%%EOF",
+                        headers=CSRF).status_code == 415
+    # A new photo replaces the old file; removing it goes back to the EIOS picture
+    stored = db.query(models.User).filter_by(username="24-isbo-001").one().photo_name
+    student.post("/api/v1/auth/me/photo", params={"name": "me.png"}, content=_upload_image(), headers=CSRF)
+    from app.core.config import settings
+    import os
+    assert not os.path.exists(os.path.join(settings.UPLOAD_DIR, stored))
+    r = student.delete("/api/v1/auth/me/photo", headers=CSRF)
+    assert r.json()["photo_url"] is None and student.get("/api/v1/auth/me/photo").status_code == 404
+
+
+# --- Tribe standings: one computation serves the crowd ---
+
+def _tribes_tournament(app, fake_eios, db, n=6):
+    from app.services import tribes as tribes_service
+    tribes_service.clear_cache()
+    admin = login_admin(app)
+    students = [login_student(app, fake_eios, username=f"24-isbo-{i:03d}", eios_id=str(900 + i)) for i in range(1, n + 1)]
+    from datetime import date, timedelta
+    t = admin.post("/api/v1/tribes/tournaments", json={
+        "title": "Турнир", "starts_on": (date.today() - timedelta(days=1)).isoformat(),
+        "ends_on": (date.today() + timedelta(days=9)).isoformat(), "tribe_names": ["Альфа", "Бета"]}, headers=CSRF).json()
+    admin.post(f"/api/v1/tribes/tournaments/{t['id']}/start", headers=CSRF)
+    return admin, students, t
+
+
+def test_finished_tournament_is_computed_once(app, fake_eios, db, monkeypatch):
+    from app.services import tribes as tribes_service
+    admin, students, t = _tribes_tournament(app, fake_eios, db)
+    admin.post(f"/api/v1/tribes/tournaments/{t['id']}/finish", headers=CSRF)
+    calls = []
+    real = tribes_service._compute
+    monkeypatch.setattr(tribes_service, "_compute", lambda *a: calls.append(1) or real(*a))
+    monkeypatch.setattr(tribes_service, "CACHE_SECONDS", 0)  # even with no time-based cache at all
+    for s in students:
+        assert s.get("/api/v1/tribes/current").json()["tournament"]["status"] == "finished"
+    assert len(calls) <= 1
+
+
+def test_stale_standings_are_served_while_one_request_recomputes(app, fake_eios, db, monkeypatch):
+    from app.services import tribes as tribes_service
+    admin, students, t = _tribes_tournament(app, fake_eios, db)
+    students[0].get("/api/v1/tribes/current")
+    monkeypatch.setattr(tribes_service, "CACHE_SECONDS", 0)
+    lock = tribes_service._computing[t["id"]]
+    lock.acquire()  # someone else is recomputing right now
+    try:
+        calls = []
+        monkeypatch.setattr(tribes_service, "_compute", lambda *a: calls.append(1))
+        r = students[1].get("/api/v1/tribes/current")
+        assert r.status_code == 200 and r.json()["tournament"]["my_tribe_id"] is not None and calls == []
+    finally:
+        lock.release()
+
+
+def test_newcomer_joins_without_a_full_recount(app, fake_eios, db, monkeypatch):
+    from app.services import tribes as tribes_service
+    admin, students, t = _tribes_tournament(app, fake_eios, db, n=4)
+    students[0].get("/api/v1/tribes/current")
+    calls = []
+    real = tribes_service._compute
+    monkeypatch.setattr(tribes_service, "_compute", lambda *a: calls.append(1) or real(*a))
+    late = login_student(app, fake_eios, username="24-isbo-050", eios_id="950")
+    view = late.get("/api/v1/tribes/current").json()["tournament"]
+    assert view["my_tribe_id"] is not None and view["my_points"] == 0 and sorted(tr["members"] for tr in view["tribes"]) == [2, 3]
+    assert calls == []
+
+
+# --- R6: a session in use is renewed; logout ends all of it; there is a hard cap ---
+
+def _cookie(client):
+    return client.cookies.get("portal_token")
+
+
+def test_active_session_is_renewed_and_logout_ends_it_all(app, fake_eios, monkeypatch):
+    from app.core.config import settings
+    student = login_student(app, fake_eios)
+    first = _cookie(student)
+    assert "set-cookie" not in student.get("/api/v1/auth/session").headers  # too early to renew
+    monkeypatch.setattr(settings, "SESSION_RENEW_MINUTES", 0)
+    r = student.get("/api/v1/auth/session")
+    assert "portal_token=" in r.headers["set-cookie"] and _cookie(student) != first
+    # Both tokens belong to one session: signing out revokes the older one as well
+    student.post("/api/v1/auth/logout", headers=CSRF)
+    old = TestClient(app)
+    old.cookies.set("portal_token", first)
+    assert old.get("/api/v1/auth/session").json() == {"user": None}
+
+
+def test_remember_me_keeps_the_session_for_two_weeks(app, fake_eios):
+    add_eios_account(fake_eios, "24-isbo-001")
+    c = TestClient(app)
+    r = c.post("/api/v1/auth/eios-login", json={"consent": True, "username": "24-isbo-001", "password": "pw", "remember": True})
+    assert "Max-Age=1209600" in r.headers["set-cookie"]
+    r = TestClient(app).post("/api/v1/auth/eios-login", json={"consent": True, "username": "24-isbo-001", "password": "pw"})
+    assert "Max-Age=86400" in r.headers["set-cookie"]
+
+
+def test_session_cap_asks_for_the_password_again(app, fake_eios):
+    from datetime import datetime, timedelta, timezone
+    from app.core import security
+    login_student(app, fake_eios)
+    long_ago = datetime.now(timezone.utc) - timedelta(days=31)
+    c = TestClient(app)
+    c.cookies.set("portal_token", security.create_access_token("24-isbo-001", remember=True, auth_time=long_ago))
+    assert c.get("/api/v1/auth/session").json() == {"user": None}
+    fresh = TestClient(app)
+    fresh.cookies.set("portal_token", security.create_access_token("24-isbo-001", auth_time=long_ago + timedelta(days=2)))
+    assert fresh.get("/api/v1/auth/session").json()["user"]["username"] == "24-isbo-001"

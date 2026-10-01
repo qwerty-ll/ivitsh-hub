@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -11,9 +12,9 @@ from sqlalchemy import text
 from sqlalchemy.exc import DataError
 
 from app.core.config import settings
-from app.core import security
-from app.db.database import SessionLocal
-from app.db.migrate import run_migrations
+from app.core import security, shared
+from app.db.database import MAX_CONNECTIONS, SessionLocal
+from app.db.migrate import STARTUP_LOCK, run_migrations
 import app.models as models
 from app.routers import auth, forum, chat, schedule, documents, admin, rooms, associations, tasks, posts, attachments, meetings, homework, calendar, events, achievements, booking, tribes, shop
 
@@ -34,7 +35,7 @@ def _seed_table_if_empty(db, model, filename: str) -> None:
     with open(path, "r", encoding="utf-8") as f:
         rows = json.load(f)
     db.add_all(model(**row) for row in rows)
-    db.commit()
+    db.flush()
     logger.info("Seeded %d rows into %s from %s", len(rows), model.__tablename__, filename)
 
 
@@ -42,9 +43,13 @@ def seed_database() -> None:
     """Fill reference tables on first start only; afterwards they are managed from the admin panel."""
     db = SessionLocal()
     try:
+        if db.bind.dialect.name == "postgresql":
+            # One worker seeds; the others wait for it and then see the rows (released at commit)
+            db.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": STARTUP_LOCK})
         _seed_table_if_empty(db, models.Teacher, "teachers.json")
         _seed_table_if_empty(db, models.Subject, "subjects.json")
         _seed_table_if_empty(db, models.Association, "associations.json")
+        db.commit()
     except Exception:
         db.rollback()
         logger.exception("Could not seed the database")
@@ -112,6 +117,38 @@ async def csrf_protection(request: Request, call_next):
     return await call_next(request)
 
 
+@app.middleware("http")
+async def renew_session(request: Request, call_next):
+    """An active cookie session gets a fresh cookie now and then, so the user is not asked to sign in again
+    while they keep using the portal (security.get_current_user decides when)."""
+    response = await call_next(request)
+    renewed = getattr(request.state, "renewed_token", None)
+    already = any(v.decode("latin-1").startswith(f"{security.AUTH_COOKIE_NAME}=")
+                  for k, v in response.raw_headers if k == b"set-cookie")
+    if renewed and response.status_code < 400 and not already:
+        security.set_auth_cookie(response, *renewed)
+    return response
+
+
+# One semaphore per event loop (tests start a loop per client)
+_in_flight: dict = {}
+
+
+@app.middleware("http")
+async def limit_in_flight(request: Request, call_next):
+    """At most as many API requests at once as the process has database connections; the rest wait here,
+    holding nothing. Without it a crowd deadlocks: requests that took a connection in a dependency wait for
+    a worker thread while every thread waits for a connection (and all of them fail after pool_timeout)."""
+    if not request.url.path.startswith("/api/"):
+        return await call_next(request)
+    loop = asyncio.get_running_loop()
+    held = _in_flight.get("api")
+    if held is None or held[0] is not loop:
+        held = _in_flight["api"] = (loop, asyncio.Semaphore(MAX_CONNECTIONS))
+    async with held[1]:
+        return await call_next(request)
+
+
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # The SPA is served from the same origin as the API (nginx / Vite proxy), so CORS is only needed
@@ -163,4 +200,8 @@ def readiness_check():
         return JSONResponse(status_code=503, content={"status": "unavailable", "database": "down"})
     finally:
         db.close()
+    problem = shared.check()
+    if problem:
+        logger.error("Readiness check: Redis is unreachable (%s)", problem)
+        return JSONResponse(status_code=503, content={"status": "unavailable", "database": "ok", "redis": "down"})
     return {"status": "ok", "database": "ok"}

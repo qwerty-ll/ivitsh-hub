@@ -1,18 +1,23 @@
-"""Small in-process sliding-window rate limiter.
+"""Sliding-window rate limiter.
 
-State lives in the worker's memory, so limits apply per uvicorn process. That is enough for the
-single-worker deployment; nginx adds coarse per-IP flood protection in front of it.
+With Redis (app.core.shared) every worker counts in one place, so several uvicorn workers cannot multiply
+a limit; without it the counts live in this process's memory, which is right for a single worker.
+nginx adds coarse per-IP flood protection in front of it.
 """
 import threading
 import time
+import uuid
 from collections import deque
 from typing import Deque, Dict
 
 from fastapi import HTTPException, Request, status
 
+from app.core import shared
+
 
 class RateLimiter:
-    def __init__(self, max_events: int, window_seconds: int, max_keys: int = 50_000):
+    def __init__(self, name: str, max_events: int, window_seconds: int, max_keys: int = 50_000):
+        self.name = name
         self.max_events = max_events
         self.window = window_seconds
         self.max_keys = max_keys
@@ -29,11 +34,38 @@ class RateLimiter:
             del self._events[key]
         return events
 
+    # --- Redis: one sorted set of timestamps per key -------------------------------------------------
+
+    def _rkey(self, key: str) -> str:
+        return shared.key("rl", self.name, key)
+
+    def _rcount(self, r, key: str) -> int:
+        pipe = r.pipeline()
+        pipe.zremrangebyscore(self._rkey(key), 0, time.time() - self.window)
+        pipe.zcard(self._rkey(key))
+        return pipe.execute()[1]
+
+    def _radd(self, r, key: str) -> None:
+        now = time.time()
+        pipe = r.pipeline()
+        pipe.zadd(self._rkey(key), {f"{now}:{uuid.uuid4().hex[:8]}": now})
+        pipe.expire(self._rkey(key), int(self.window) + 1)
+        pipe.execute()
+
+    # --- The interface --------------------------------------------------------------------------------
+
     def is_limited(self, key: str) -> bool:
+        r = shared.client()
+        if r is not None:
+            return self._rcount(r, key) >= self.max_events
         with self._lock:
             return len(self._prune(key, time.monotonic())) >= self.max_events
 
     def add(self, key: str) -> None:
+        r = shared.client()
+        if r is not None:
+            self._radd(r, key)
+            return
         with self._lock:
             now = time.monotonic()
             self._prune(key, now)
@@ -45,6 +77,12 @@ class RateLimiter:
 
     def hit(self, key: str) -> bool:
         """Record an event and return False when the key is over the limit."""
+        r = shared.client()
+        if r is not None:
+            if self._rcount(r, key) >= self.max_events:
+                return False
+            self._radd(r, key)
+            return True
         with self._lock:
             now = time.monotonic()
             events = self._prune(key, now)
@@ -54,10 +92,17 @@ class RateLimiter:
         return True
 
     def reset(self, key: str) -> None:
+        r = shared.client()
+        if r is not None:
+            r.delete(self._rkey(key))
         with self._lock:
             self._events.pop(key, None)
 
     def clear(self) -> None:
+        r = shared.client()
+        if r is not None:
+            for k in r.scan_iter(match=shared.key("rl", self.name, "*")):
+                r.delete(k)
         with self._lock:
             self._events.clear()
 
@@ -73,13 +118,13 @@ def too_many_requests(detail: str = "Слишком много попыток. �
 # Failed logins: per account and address (stops password guessing) and per IP (stops spraying many accounts).
 # Keyed by the pair, not the login alone: otherwise anyone who knows a login could lock its owner out.
 # The per-IP budget is generous because the whole campus Wi-Fi shares one NAT address.
-login_failures_by_user = RateLimiter(max_events=5, window_seconds=15 * 60)
-login_failures_by_ip = RateLimiter(max_events=300, window_seconds=15 * 60)
-admin_login_failures_by_ip = RateLimiter(max_events=10, window_seconds=15 * 60)
-chat_requests = RateLimiter(max_events=20, window_seconds=60)
-document_requests = RateLimiter(max_events=30, window_seconds=60)
+login_failures_by_user = RateLimiter("login_user", max_events=5, window_seconds=15 * 60)
+login_failures_by_ip = RateLimiter("login_ip", max_events=300, window_seconds=15 * 60)
+admin_login_failures_by_ip = RateLimiter("admin_ip", max_events=10, window_seconds=15 * 60)
+chat_requests = RateLimiter("chat", max_events=20, window_seconds=60)
+document_requests = RateLimiter("documents", max_events=30, window_seconds=60)
 # Forum questions and answers, homework entries, comments: a person does not write more than this
-content_posts = RateLimiter(max_events=30, window_seconds=10 * 60)
+content_posts = RateLimiter("posts", max_events=30, window_seconds=10 * 60)
 
 
 def login_key(kind: str, username: str, ip: str) -> str:

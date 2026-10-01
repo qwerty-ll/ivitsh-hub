@@ -36,13 +36,31 @@ class Settings:
         self.ALGORITHM = os.getenv("ALGORITHM", "HS256").strip().upper()
         if self.ALGORITHM not in _ALLOWED_JWT_ALGORITHMS:
             raise RuntimeError(f"ALGORITHM must be one of {sorted(_ALLOWED_JWT_ALGORITHMS)}")
+        # A session ends after this long without visits; every visit extends it (sliding session)
         self.ACCESS_TOKEN_EXPIRE_MINUTES = _int("ACCESS_TOKEN_EXPIRE_MINUTES", 1440)
+        # ... or this long with "Не выходить на этом устройстве" at sign-in
+        self.SESSION_REMEMBER_DAYS = max(1, _int("SESSION_REMEMBER_DAYS", 14))
+        # The cookie is re-issued at most this often while the user is active
+        self.SESSION_RENEW_MINUTES = max(0, _int("SESSION_RENEW_MINUTES", 60))
+        # However active, the password is asked again after this many days since it was entered
+        self.SESSION_MAX_DAYS = max(1, _int("SESSION_MAX_DAYS", 30))
         # Secure cookies need HTTPS; browsers still accept them on http://localhost for development.
         self.COOKIE_SECURE = _bool("COOKIE_SECURE", True)
 
         self.DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./portal.db")
-        self.DB_POOL_SIZE = _int("DB_POOL_SIZE", 10)
-        self.DB_MAX_OVERFLOW = _int("DB_MAX_OVERFLOW", 20)
+        # uvicorn starts this many worker processes (it reads WEB_CONCURRENCY itself)
+        self.WEB_CONCURRENCY = max(1, _int("WEB_CONCURRENCY", 1))
+        # Several workers share rate limits, caches and GigaChat streams through Redis
+        self.REDIS_URL = os.getenv("REDIS_URL", "").strip()
+        if self.WEB_CONCURRENCY > 1:
+            if not self.REDIS_URL:
+                raise RuntimeError("WEB_CONCURRENCY > 1 needs REDIS_URL: workers must share rate limits and caches")
+            if self.DATABASE_URL.startswith("sqlite"):
+                raise RuntimeError("WEB_CONCURRENCY > 1 needs PostgreSQL: SQLite cannot serialize several processes")
+        # Every worker has its own pool: together they stay within PostgreSQL's 100 connections
+        per_worker = max(6, 80 // self.WEB_CONCURRENCY)
+        self.DB_POOL_SIZE = _int("DB_POOL_SIZE", min(10, per_worker // 3))
+        self.DB_MAX_OVERFLOW = _int("DB_MAX_OVERFLOW", min(20, per_worker - per_worker // 3))
 
         self.ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "").strip()
         self.ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")

@@ -12,7 +12,7 @@ import { BadgeGrid, LevelCard, PointsRules } from '../components/Progress';
 import { useInstallApp } from '../utils/install';
 import SectionIcon from '../components/SectionIcon';
 import { ProfileAssociations, ProfileContacts } from '../components/ProfileCommunity';
-import { initialsOf, shrinkAvatar } from '../utils/avatar';
+import { initialsOf, shrinkAvatar, dataUrlToBlob } from '../utils/avatar';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 
@@ -36,7 +36,7 @@ const handleTabsKeyDown = (e, ids, current, select, idPrefix) => {
 };
 
 const Profile = () => {
-  const { user, isLoggedIn, login, adminLogin, logout, updateUserProfile, sessionExpired } = useAuth();
+  const { user, isLoggedIn, login, adminLogin, logout, setPhoto, sessionExpired } = useAuth();
   const toast = useToast();
 
   // Login form states
@@ -48,6 +48,8 @@ const Profile = () => {
   const [capsLockOn, setCapsLockOn] = useState(false);
   // 152-ФЗ: a separate, unticked consent box; signing in through EIOS needs it
   const [consent, setConsent] = useState(false);
+  // "Не выходить на этом устройстве": the session lasts two weeks without visits instead of a day
+  const [remember, setRemember] = useState(false);
   const [avatarLoadError, setAvatarLoadError] = useState(false);
   const app = useInstallApp();
 
@@ -90,7 +92,7 @@ const Profile = () => {
       if (loginMode === 'staff') {
         res = await adminLogin(loginForm.username, loginForm.password);
       } else {
-        res = await login(loginForm.username, '', loginForm.password, consent);
+        res = await login(loginForm.username, '', loginForm.password, consent, remember);
       }
 
       if (res && res.error) {
@@ -131,22 +133,24 @@ const Profile = () => {
     }
 
     shrinkAvatar(file)
-      .then((dataUrl) => {
-        if (updateUserProfile({ photoUrl: dataUrl })) {
-          setAvatarLoadError(false);
-          toast.show('Фото профиля обновлено', 'success');
-        } else {
-          toast.show('Браузер не дал сохранить фото. Проверьте, не включён ли приватный режим', 'warning');
-        }
+      .catch(() => { throw new Error('Не удалось открыть изображение. Попробуйте другой файл'); })
+      .then((dataUrl) => setPhoto(dataUrlToBlob(dataUrl)))
+      .then(() => {
+        setAvatarLoadError(false);
+        toast.show('Фото профиля обновлено', 'success');
       })
-      .catch(() => toast.show('Не удалось открыть изображение. Попробуйте другой файл', 'warning'))
+      .catch((err) => toast.show(err.message || 'Не удалось сохранить фото', 'warning'))
       .finally(() => { e.target.value = ''; });
   };
 
-  const handleAvatarReset = () => {
-    updateUserProfile({ photoUrl: null });
-    setAvatarLoadError(false);
-    toast.show(user?.serverPhotoUrl ? 'Вернули фото из ЭИОС' : 'Фото убрано', 'success');
+  const handleAvatarReset = async () => {
+    try {
+      await setPhoto(null);
+      setAvatarLoadError(false);
+      toast.show(user?.serverPhotoUrl ? 'Вернули фото из ЭИОС' : 'Фото убрано', 'success');
+    } catch (err) {
+      toast.show(err.message || 'Не удалось убрать фото', 'warning');
+    }
   };
 
   const selectLoginMode = (mode) => {
@@ -291,6 +295,19 @@ const Profile = () => {
                   </span>
                 </label>
               )}
+              {!isStaff && (
+                <label className="login-consent">
+                  <input
+                    type="checkbox"
+                    checked={remember}
+                    onChange={e => setRemember(e.target.checked)}
+                    disabled={isLoggingIn}
+                  />
+                  <span>
+                    Не выходить на этом устройстве. Не отмечайте на общем компьютере.
+                  </span>
+                </label>
+              )}
 
               {!loginError && sessionExpired && (
                 <p className="login-alert login-alert-warning" role="status">
@@ -389,7 +406,7 @@ const Profile = () => {
                 </button>
               )}
               <p id="profile-photo-hint" className="profile-photo-hint">
-                PNG, JPEG или WebP. Фото хранится в этом браузере — на другом устройстве выберите его снова.
+                PNG, JPEG или WebP. Фото видно только вам — на всех ваших устройствах.
               </p>
             </div>
 

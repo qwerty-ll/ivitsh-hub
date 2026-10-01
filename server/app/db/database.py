@@ -34,6 +34,9 @@ else:
         pool_pre_ping=True,
     )
 
+# Connections one process can hold at once (SQLite gets SQLAlchemy's default pool of 5 + 10)
+MAX_CONNECTIONS = 15 if IS_SQLITE else settings.DB_POOL_SIZE + settings.DB_MAX_OVERFLOW
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

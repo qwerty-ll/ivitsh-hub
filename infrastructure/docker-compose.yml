@@ -19,6 +19,21 @@ services:
     networks:
       - portal_network
 
+  # Shared state of the backend workers: rate limits, the tribes snapshot, GigaChat streams.
+  # Nothing here needs to survive a restart, so no persistence.
+  redis:
+    image: redis:7-alpine
+    container_name: ivitsh_portal_redis
+    restart: always
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - portal_network
+
   backend:
     build:
       context: ..
@@ -31,10 +46,15 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-portal_user}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-portal_db}
       # Attached files (orders, scripts, mock-ups): personal data, back this volume up with the database
       UPLOAD_DIR: /app/data/uploads
+      # Worker processes; more than one needs Redis (shared limits and caches) and PostgreSQL
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - backend_data:/app/data
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - portal_network

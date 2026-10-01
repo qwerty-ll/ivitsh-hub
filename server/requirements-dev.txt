@@ -1,2 +1,4 @@
 -r requirements.txt
 pytest>=8.0
+# Redis stand-in for the tests of the shared (several workers) mode
+fakeredis>=2.20,<3.0

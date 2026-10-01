@@ -20,6 +20,7 @@ from typing import List, Optional
 import certifi
 import httpx
 
+from app.core import shared
 from app.core.config import settings
 
 logger = logging.getLogger("ivitsh_portal.rag")
@@ -85,6 +86,48 @@ def _loop_bound(name: str, factory):
 
 def _streams() -> asyncio.Semaphore:
     return _loop_bound("streams", lambda: asyncio.Semaphore(settings.GIGACHAT_MAX_STREAMS))
+
+
+# A stream mark older than this is from a worker that died mid-call and no longer counts
+_STREAM_TTL = 60.0
+
+
+async def _acquire_stream(timeout: float):
+    """A free GigaChat stream. The key allows GIGACHAT_MAX_STREAMS at once for the whole portal, so with Redis
+    the workers count together (a sorted set of who holds one); otherwise this process's semaphore does.
+    Returns what release needs; raises asyncio.TimeoutError when none frees up in time."""
+    r = shared.client()
+    if r is None:
+        streams = _streams()
+        await asyncio.wait_for(streams.acquire(), timeout)
+        return streams
+    name, me = shared.key("gigachat", "streams"), uuid.uuid4().hex
+    deadline = time.monotonic() + timeout
+
+    def try_take() -> bool:
+        now = time.time()
+        r.zremrangebyscore(name, 0, now - _STREAM_TTL)
+        r.zadd(name, {me: now})
+        r.expire(name, int(_STREAM_TTL) + 5)
+        if r.zrank(name, me) < settings.GIGACHAT_MAX_STREAMS:
+            return True
+        r.zrem(name, me)
+        return False
+
+    while not await asyncio.to_thread(try_take):
+        if time.monotonic() >= deadline:
+            raise asyncio.TimeoutError
+        await asyncio.sleep(0.2)
+    return me
+
+
+async def _release_stream(held) -> None:
+    if isinstance(held, str):
+        r = shared.client()
+        if r is not None:
+            await asyncio.to_thread(r.zrem, shared.key("gigachat", "streams"), held)
+    else:
+        held.release()
 
 
 def _token_lock() -> asyncio.Lock:
@@ -364,9 +407,8 @@ async def chat(messages: List[dict], functions: Optional[List[dict]] = None, fun
     if functions:
         payload["functions"] = functions
         payload["function_call"] = function_call
-    streams = _streams()
     try:
-        await asyncio.wait_for(streams.acquire(), QUEUE_WAIT)
+        held = await _acquire_stream(QUEUE_WAIT)
     except asyncio.TimeoutError:
         raise GigaChatUnavailable("all streams are busy") from None
     try:
@@ -374,7 +416,7 @@ async def chat(messages: List[dict], functions: Optional[List[dict]] = None, fun
     except asyncio.TimeoutError:
         raise GigaChatUnavailable(f"no answer in {CALL_DEADLINE:.0f} s") from None
     finally:
-        streams.release()
+        await _release_stream(held)
 
 
 def text_of(choice: dict) -> str:

@@ -150,7 +150,7 @@ def test_files_per_item_are_limited(club, monkeypatch):
     admin, aid, leader, member = club
     monkeypatch.setattr(settings, "FILES_PER_ITEM", 2)
     t = member.post("/api/v1/tasks", json={"title": "Эссе"}, headers=CSRF).json()
-    pdf = b"%PDF-1.4\n% test\n"
+    pdf = b"%PDF-1.4\n% test\n%%EOF\n"
     for _ in range(2):
         assert member.post(f"/api/v1/tasks/{t['id']}/files", params={"name": "a.pdf"}, content=pdf, headers=CSRF).status_code == 201
     assert member.post(f"/api/v1/tasks/{t['id']}/files", params={"name": "a.pdf"}, content=pdf, headers=CSRF).status_code == 400
@@ -160,7 +160,7 @@ def test_upload_quota_per_student(club, monkeypatch, db):
     admin, aid, leader, member = club
     monkeypatch.setattr(settings, "USER_UPLOAD_QUOTA_MB", 1)
     t = member.post("/api/v1/tasks", json={"title": "Эссе"}, headers=CSRF).json()
-    pdf = b"%PDF-1.4\n% test\n"
+    pdf = b"%PDF-1.4\n% test\n%%EOF\n"
     assert member.post(f"/api/v1/tasks/{t['id']}/files", params={"name": "a.pdf"}, content=pdf, headers=CSRF).status_code == 201
     # A megabyte already stored somewhere else
     db.add(models.Attachment(kind="file", title="old.pdf", size=1024 * 1024, uploaded_by_id=_uid(db, 2), task_id=t["id"]))

@@ -41,15 +41,45 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(_bcrypt_input(password), bcrypt.gensalt()).decode("utf-8")
 
 
-def create_access_token(subject: str) -> str:
+def _lifetime(remember: bool) -> timedelta:
+    return timedelta(days=settings.SESSION_REMEMBER_DAYS) if remember else timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
+
+def create_access_token(subject: str, *, remember: bool = False, session_id: Optional[str] = None,
+                        auth_time: Optional[datetime] = None) -> str:
+    """A session token. sid stays the same across renewals (logout revokes the whole session);
+    auth is when the password was entered, which caps how long renewals may go on."""
     now = datetime.now(timezone.utc)
+    jti = str(uuid.uuid4())
     payload = {
         "sub": subject,
         "iat": now,
-        "exp": now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
-        "jti": str(uuid.uuid4()),
+        "exp": now + _lifetime(remember),
+        "jti": jti,
+        "sid": session_id or jti,
+        "auth": int((auth_time or now).timestamp()),
+        "rem": bool(remember),
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def renewed_token(payload: dict) -> Optional[str]:
+    """A fresh token for the same session when the current one is old enough, unless the session hit its cap."""
+    now = datetime.now(timezone.utc)
+    issued = datetime.fromtimestamp(payload.get("iat", 0), timezone.utc)
+    if now - issued < timedelta(minutes=settings.SESSION_RENEW_MINUTES):
+        return None
+    auth_time = datetime.fromtimestamp(payload.get("auth", payload.get("iat", 0)), timezone.utc)
+    if now - auth_time >= timedelta(days=settings.SESSION_MAX_DAYS):
+        return None
+    return create_access_token(payload["sub"], remember=bool(payload.get("rem")),
+                               session_id=payload.get("sid") or payload["jti"], auth_time=auth_time)
+
+
+def session_expired(payload: dict) -> bool:
+    """Past the absolute cap: the password has to be entered again."""
+    auth = payload.get("auth", payload.get("iat", 0))
+    return datetime.now(timezone.utc) - datetime.fromtimestamp(auth, timezone.utc) >= timedelta(days=settings.SESSION_MAX_DAYS)
 
 
 def decode_access_token(token: str) -> Optional[dict]:
@@ -64,14 +94,14 @@ def decode_access_token(token: str) -> Optional[dict]:
         return None
 
 
-def set_auth_cookie(response: Response, token: str) -> None:
+def set_auth_cookie(response: Response, token: str, remember: bool = False) -> None:
     response.set_cookie(
         key=AUTH_COOKIE_NAME,
         value=token,
         httponly=True,
         samesite="lax",
         secure=settings.COOKIE_SECURE,
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        max_age=int(_lifetime(remember).total_seconds()),
         path="/",
     )
 
@@ -87,8 +117,10 @@ def clear_auth_cookie(response: Response) -> None:
 
 
 def revoke_token(jti: str, db: Session) -> None:
-    """Store the JTI so the token is rejected until it expires, and drop entries that already expired."""
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    """Store the id (a token's jti or a whole session's sid) so it is rejected, and drop entries no token
+    can outlive any more: no session lasts beyond SESSION_MAX_DAYS plus one token lifetime."""
+    longest = timedelta(days=settings.SESSION_MAX_DAYS) + max(_lifetime(True), _lifetime(False))
+    cutoff = datetime.now(timezone.utc) - longest
     try:
         db.query(models.RevokedToken).filter(models.RevokedToken.revoked_at < cutoff).delete(synchronize_session=False)
         if not db.query(models.RevokedToken).filter(models.RevokedToken.jti == jti).first():
@@ -99,8 +131,9 @@ def revoke_token(jti: str, db: Session) -> None:
         raise
 
 
-def is_token_revoked(jti: str, db: Session) -> bool:
-    return db.query(models.RevokedToken.id).filter(models.RevokedToken.jti == jti).first() is not None
+def is_token_revoked(jti: str, db: Session, session_id: Optional[str] = None) -> bool:
+    ids = {jti, session_id} - {None}
+    return db.query(models.RevokedToken.id).filter(models.RevokedToken.jti.in_(ids)).first() is not None
 
 
 def extract_token(request: Request, bearer_token: Optional[str]) -> Optional[str]:
@@ -116,12 +149,17 @@ def get_current_user(
     if not auth_token:
         return None
     payload = decode_access_token(auth_token)
-    if not payload or is_token_revoked(payload["jti"], db):
+    if not payload or session_expired(payload) or is_token_revoked(payload["jti"], db, payload.get("sid")):
         return None
     user = db.query(models.User).filter(models.User.username == payload["sub"]).first()
     if not user or user.is_blocked:
         return None
     touch_last_seen(user, db)
+    if not token:
+        # A cookie session in use: a middleware puts the renewed cookie on the response
+        fresh = renewed_token(payload)
+        if fresh:
+            request.state.renewed_token = (fresh, bool(payload.get("rem")))
     return user
 
 

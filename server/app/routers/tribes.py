@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.database import get_db
@@ -47,37 +49,55 @@ def _current(db: Session) -> Optional[models.Tournament]:
         models.Tournament.ends_on.desc()).first()
 
 
-def _auto_join(db: Session, t: models.Tournament, user: models.User) -> None:
+def _auto_join(db: Session, t: models.Tournament, user: models.User, snapshot: Dict) -> Dict:
     """A student who appeared after the split joins the smallest tribe (while the tournament runs)."""
-    if t.status != "active" or not t.auto_join or user.role != "student" or user.is_blocked:
-        return
-    if any(m.user_id == user.id for tribe in t.tribes for m in tribe.members):
-        return
-    if user.id not in {u.id for u in tribes_service.pool(db, t)}:
-        return
-    smallest = min(t.tribes, key=lambda tr: (len(tr.members), tr.id))
-    db.add(models.TribeMember(tournament_id=t.id, tribe_id=smallest.id, user_id=user.id))
-    db.commit()
-    tribes_service.clear_cache()
+    if t.status != "active" or not t.auto_join or user.role != "student" or user.is_blocked or user.auth_source != "eios":
+        return snapshot
+    if any(p[0] == user.id for p in snapshot["people"]):
+        return snapshot
+    wanted = {tribes_service.group_key(g) for g in (t.groups or "").split(",")} - {""}
+    if wanted and tribes_service.group_key(user.group_number) not in wanted:
+        return snapshot
+    if db.query(models.TribeMember.id).filter_by(tournament_id=t.id, user_id=user.id).first():
+        return snapshot
+    sizes = dict(db.query(models.Tribe.id, func.count(models.TribeMember.id))
+                 .outerjoin(models.TribeMember, models.TribeMember.tribe_id == models.Tribe.id)
+                 .filter(models.Tribe.tournament_id == t.id).group_by(models.Tribe.id).all())
+    if not sizes:
+        return snapshot
+    smallest = min(sizes, key=lambda tid: (sizes[tid], tid))
+    db.add(models.TribeMember(tournament_id=t.id, tribe_id=smallest, user_id=user.id))
+    try:
+        db.commit()
+    except IntegrityError:
+        # The same student's other tab joined first
+        db.rollback()
+        return snapshot
+    tribes_service.add_member(t, smallest, user)
+    return tribes_service.standings(db, t)
 
 
-def view(db: Session, t: models.Tournament, user: models.User) -> Dict:
-    table = tribes_service.standings(db, t)
-    names = {m.user_id: (m.user.full_name, m.user.group_number) for tr in t.tribes for m in tr.members}
-    mine = next((tr for tr in t.tribes if any(m.user_id == user.id for m in tr.members)), None)
+def view(db: Session, t: models.Tournament, user: models.User, snapshot: Optional[Dict] = None) -> Dict:
+    table = snapshot or tribes_service.standings(db, t)
+    by_tribe: Dict[int, list] = {}
+    for uid, tribe_id, name, group, pts in table["people"]:
+        by_tribe.setdefault(tribe_id, []).append((uid, name, group, pts))
+    mine_id = next((p[1] for p in table["people"] if p[0] == user.id), None)
     is_admin = user.role == "admin"
     rows = []
     for row in table["tribes"]:
-        ranked = sorted(row["contributions"].items(), key=lambda kv: -kv[1])
+        ranked = sorted(by_tribe.get(row["id"], []), key=lambda p: -p[3])
         # The tribe's best contributor: its master for this tournament
-        master = names.get(ranked[0][0], ("", ""))[0] if ranked and ranked[0][1] > 0 else None
-        top = [{"full_name": names[uid][0], "group_number": names[uid][1], "points": pts}
-               for uid, pts in (ranked if is_admin or (mine and mine.id == row["id"]) else ranked[:TOP_SHOWN])[:200]
-               if uid in names]
-        rows.append({k: v for k, v in row.items() if k != "contributions"} | {"master": master, "top": top})
-    tribe_by_id = {tr.id: tr for tr in t.tribes}
-    awards = sorted((a for tr in t.tribes for a in tr.awards), key=lambda a: a.created_at or _now(), reverse=True)[:30]
-    my_row = next((r for r in table["tribes"] if mine and r["id"] == mine.id), None)
+        master = ranked[0][1] if ranked and ranked[0][3] > 0 else None
+        shown = ranked if is_admin or mine_id == row["id"] else ranked[:TOP_SHOWN]
+        top = [{"full_name": name, "group_number": group, "points": pts} for _, name, group, pts in shown[:200]]
+        rows.append(dict(row) | {"master": master, "top": top})
+    names = {r["id"]: r for r in table["tribes"]}
+    my_points = my_rank = None
+    if mine_id is not None:
+        values = sorted((p[3] for p in by_tribe.get(mine_id, [])), reverse=True)
+        my_points = next(p[4] for p in table["people"] if p[0] == user.id)
+        my_rank = values.index(my_points) + 1
     return {
         "id": t.id, "title": t.title, "status": t.status,
         "starts_on": t.starts_on.isoformat(), "ends_on": t.ends_on.isoformat(),
@@ -85,14 +105,12 @@ def view(db: Session, t: models.Tournament, user: models.User) -> Dict:
         "groups": [g for g in (t.groups or "").split(",") if g],
         "auto_join": t.auto_join,
         "tribes": rows,
-        "my_tribe_id": mine.id if mine else None,
-        "my_points": my_row["contributions"].get(user.id, 0) if my_row else None,
-        "my_rank_in_tribe": (sorted(my_row["contributions"].values(), reverse=True).index(my_row["contributions"][user.id]) + 1)
-        if my_row and user.id in my_row["contributions"] else None,
+        "my_tribe_id": mine_id,
+        "my_points": my_points,
+        "my_rank_in_tribe": my_rank,
         "awards": [
-            {"tribe": tribe_by_id[a.tribe_id].name, "color": tribe_by_id[a.tribe_id].color,
-             "points": a.points, "reason": a.reason, "created_at": a.created_at}
-            for a in awards
+            {"tribe": names[tid]["name"], "color": names[tid]["color"], "points": pts, "reason": reason, "created_at": when}
+            for tid, pts, reason, when in table["awards"] if tid in names
         ],
         "computed_at": table["computed_at"],
         "can_manage": is_admin,
@@ -101,26 +119,28 @@ def view(db: Session, t: models.Tournament, user: models.User) -> Dict:
 
 @router.get("/tribes/current")
 def current(user: models.User = Depends(security.require_current_user), db: Session = Depends(get_db)):
+    """The page everyone opens: one light row and the cached snapshot, never the whole member list."""
     t = _current(db)
     if not t:
         return {"tournament": None}
-    t = _load(db, t.id)
-    _auto_join(db, t, user)
-    return {"tournament": view(db, _load(db, t.id), user)}
+    snapshot = _auto_join(db, t, user, tribes_service.standings(db, t))
+    return {"tournament": view(db, t, user, snapshot)}
 
 
 @router.get("/tribes/tournaments")
 def tournaments(user: models.User = Depends(security.require_current_user), db: Session = Depends(get_db)):
-    rows = db.query(models.Tournament).options(selectinload(models.Tournament.tribes).selectinload(models.Tribe.members)).order_by(
+    rows = db.query(models.Tournament).options(selectinload(models.Tournament.tribes)).order_by(
         models.Tournament.starts_on.desc()).all()
     if user.role != "admin":
         rows = [t for t in rows if t.status != "draft"]
+    counts = dict(db.query(models.TribeMember.tournament_id, func.count(models.TribeMember.id))
+                  .group_by(models.TribeMember.tournament_id).all())
     out = []
     for t in rows:
         winner = next((tr for tr in t.tribes if tr.id == t.winner_tribe_id), None)
         out.append({
             "id": t.id, "title": t.title, "status": t.status, "starts_on": t.starts_on.isoformat(), "ends_on": t.ends_on.isoformat(),
-            "tribes": len(t.tribes), "members": sum(len(tr.members) for tr in t.tribes),
+            "tribes": len(t.tribes), "members": counts.get(t.id, 0),
             "winner": {"name": winner.name, "color": winner.color, "points": winner.final_points} if winner else None,
         })
     return out
@@ -128,8 +148,8 @@ def tournaments(user: models.User = Depends(security.require_current_user), db: 
 
 @router.get("/tribes/tournaments/{tournament_id}")
 def tournament(tournament_id: int, user: models.User = Depends(security.require_current_user), db: Session = Depends(get_db)):
-    t = _load(db, tournament_id)
-    if t.status == "draft" and user.role != "admin":
+    t = db.query(models.Tournament).filter(models.Tournament.id == tournament_id).first()
+    if not t or (t.status == "draft" and user.role != "admin"):
         raise HTTPException(status_code=404, detail="Турнир не найден")
     return view(db, t, user)
 
@@ -223,7 +243,7 @@ def finish(tournament_id: int, user: models.User = Depends(security.require_admi
         raise HTTPException(status_code=400, detail="Завершить можно только идущий турнир")
     tribes_service.clear_cache()
     table = tribes_service.standings(db, t)["tribes"]
-    by_id = {tr.id: tr for tr in t.tribes}
+    by_id = {tr.id: tr for tr in t.tribes}  # members loaded by _load
     prizes = [t.prize_1, t.prize_2, t.prize_3]
     place = 0
     prev = None

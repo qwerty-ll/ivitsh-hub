@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.db.database import SessionLocal
 from conftest import CSRF, login_admin, login_student
 
-PDF = b"%PDF-1.4\n% test\n"
+PDF = b"%PDF-1.4\n% test\n%%EOF\n"
 
 
 @pytest.fixture(autouse=True)

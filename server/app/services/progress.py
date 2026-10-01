@@ -82,84 +82,124 @@ def _in(value: Optional[datetime], bounds: Optional[Tuple[datetime, datetime]]) 
     return value is not None and bounds[0] <= value < bounds[1]
 
 
-def facts(db: Session, user: models.User, bounds: Optional[Tuple[datetime, datetime]] = None) -> Dict[str, int]:
-    """Counts of confirmed actions, overall or within a period."""
-    now = datetime.now(timezone.utc)
-    regs = (
-        db.query(models.EventRegistration, models.Event)
-        .join(models.Event, models.EventRegistration.event_id == models.Event.id)
+# Users per IN (...) list: SQLite allows a few thousand bound parameters per statement
+_CHUNK = 500
+
+
+@dataclass
+class _Raw:
+    """The rows behind one person's facts, fetched once and counted for any period."""
+    regs: List[Tuple[str, str, datetime, datetime]]  # role, scope, starts_at, ends_at (attended only)
+    meetings: List[datetime]
+    cards: List[Tuple[datetime, datetime, datetime]]  # completed, due, created
+    homework: List[datetime]
+    answers: List[Tuple[datetime, bool]]
+    associations: int
+    organized: List[Tuple[datetime, datetime, int]]  # starts_at, ends_at, how many others came
+
+
+def _collect(db: Session, user_ids: List[int]) -> Dict[int, _Raw]:
+    """The facts' rows for many people at once: a handful of queries instead of a dozen per person."""
+    raw = {uid: _Raw([], [], [], [], [], 0, []) for uid in user_ids}
+    for i in range(0, len(user_ids), _CHUNK):
+        ids = user_ids[i:i + _CHUNK]
         # Bits only for attendance the organizers confirmed: a sign-up alone is not participation
-        .filter(models.EventRegistration.user_id == user.id, models.EventRegistration.attended.is_(True))
-        .all()
-    )
+        for uid, role, scope, starts, ends in (
+            db.query(models.EventRegistration.user_id, models.EventRegistration.role, models.Event.scope,
+                     models.Event.starts_at, models.Event.ends_at)
+            .join(models.Event, models.EventRegistration.event_id == models.Event.id)
+            .filter(models.EventRegistration.user_id.in_(ids), models.EventRegistration.attended.is_(True))
+        ):
+            raw[uid].regs.append((role, scope, starts, ends))
+        for uid, starts in (
+            db.query(models.MeetingAttendance.user_id, models.Meeting.starts_at)
+            .join(models.Meeting, models.MeetingAttendance.meeting_id == models.Meeting.id)
+            .filter(models.MeetingAttendance.user_id.in_(ids))
+        ):
+            raw[uid].meetings.append(starts)
+        # Only association tasks the leader accepted ("Готово"), with a deadline, set by someone else,
+        # that existed a while before being handed in. Personal tasks never count: anyone could tick them off.
+        for uid, completed, due, created in (
+            db.query(models.TaskAssignee.user_id, models.TaskAssignee.completed_at, models.Task.due_at, models.Task.created_at)
+            .join(models.Task, models.TaskAssignee.task_id == models.Task.id)
+            .filter(models.TaskAssignee.user_id.in_(ids), models.TaskAssignee.status == "done",
+                    models.TaskAssignee.completed_at.isnot(None), models.Task.association_id.isnot(None),
+                    models.Task.due_at.isnot(None), models.Task.created_by_id != models.TaskAssignee.user_id)
+        ):
+            raw[uid].cards.append((completed, due, created))
+        for uid, created in (db.query(models.GroupHomework.created_by_id, models.GroupHomework.created_at)
+                             .filter(models.GroupHomework.created_by_id.in_(ids))):
+            raw[uid].homework.append(created)
+        # Answers to one's own questions do not count
+        for uid, created, is_solution in (
+            db.query(models.ForumAnswer.author_id, models.ForumAnswer.created_at, models.ForumAnswer.is_solution)
+            .join(models.ForumQuestion, models.ForumAnswer.question_id == models.ForumQuestion.id)
+            .filter(models.ForumAnswer.author_id.in_(ids), models.ForumQuestion.author_id != models.ForumAnswer.author_id)
+        ):
+            raw[uid].answers.append((created, bool(is_solution)))
+        for uid, count in (db.query(models.Membership.user_id, func.count(models.Membership.id))
+                           .filter(models.Membership.user_id.in_(ids), models.Membership.status == "approved")
+                           .group_by(models.Membership.user_id)):
+            raw[uid].associations = count
+        led = {(uid, aid) for uid, aid in db.query(models.Membership.user_id, models.Membership.association_id)
+               .filter(models.Membership.user_id.in_(ids), models.Membership.role == "leader")}
+        if led:
+            events = [(eid, uid, aid, starts, ends) for eid, uid, aid, starts, ends in
+                      db.query(models.Event.id, models.Event.created_by_id, models.Event.association_id,
+                               models.Event.starts_at, models.Event.ends_at)
+                      .filter(models.Event.created_by_id.in_(ids), models.Event.association_id.isnot(None))
+                      if (uid, aid) in led]
+            event_ids = [e[0] for e in events]
+            creators = {e[0]: e[1] for e in events}
+            # Others who came: the organizer's own attendance does not count
+            others: Dict[int, int] = {}
+            for j in range(0, len(event_ids), _CHUNK):
+                for eid, user_id in (db.query(models.EventRegistration.event_id, models.EventRegistration.user_id)
+                                     .filter(models.EventRegistration.event_id.in_(event_ids[j:j + _CHUNK]),
+                                             models.EventRegistration.attended.is_(True))):
+                    if user_id != creators[eid]:
+                        others[eid] = others.get(eid, 0) + 1
+            for eid, uid, _, starts, ends in events:
+                raw[uid].organized.append((starts, ends, others.get(eid, 0)))
+    return raw
+
+
+def _count(r: _Raw, bounds: Optional[Tuple[datetime, datetime]], now: datetime) -> Dict[str, int]:
     events = volunteer = association_events = 0
-    for reg, event in regs:
-        if _as_utc(event.ends_at) <= now and _in(event.starts_at, bounds):
-            if event.scope != "institute":
+    for role, scope, starts, ends in r.regs:
+        if _as_utc(ends) <= now and _in(starts, bounds):
+            if scope != "institute":
                 association_events += 1
-            if reg.role == "volunteer":
+            if role == "volunteer":
                 volunteer += 1
             else:
                 events += 1
-
-    meetings = sum(
-        1 for (starts,) in db.query(models.Meeting.starts_at)
-        .join(models.MeetingAttendance, models.MeetingAttendance.meeting_id == models.Meeting.id)
-        .filter(models.MeetingAttendance.user_id == user.id)
-        if _in(starts, bounds)
-    )
-
     on_time = late = 0
-    # Only association tasks the leader accepted ("Готово"), with a deadline, set by someone else,
-    # that existed a while before being handed in. Personal tasks never count: anyone could tick them off.
-    cards = (
-        db.query(models.TaskAssignee.completed_at, models.Task.due_at, models.Task.created_at)
-        .join(models.Task, models.TaskAssignee.task_id == models.Task.id)
-        .filter(models.TaskAssignee.user_id == user.id, models.TaskAssignee.status == "done",
-                models.TaskAssignee.completed_at.isnot(None), models.Task.association_id.isnot(None),
-                models.Task.due_at.isnot(None), models.Task.created_by_id != user.id)
-        .all()
-    )
-    for completed, due, created in cards:
+    for completed, due, created in r.cards:
         if not _in(completed, bounds) or _as_utc(completed) - _as_utc(created) < TASK_MIN_LIFETIME:
             continue
         if _as_utc(completed) <= _as_utc(due):
             on_time += 1
         else:
             late += 1
-
-    homework = sum(1 for (created,) in db.query(models.GroupHomework.created_at)
-                   .filter(models.GroupHomework.created_by_id == user.id) if _in(created, bounds))
     answers = solutions = 0
-    # Answers to one's own questions do not count
-    for created, is_solution in (
-        db.query(models.ForumAnswer.created_at, models.ForumAnswer.is_solution)
-        .join(models.ForumQuestion, models.ForumAnswer.question_id == models.ForumQuestion.id)
-        .filter(models.ForumAnswer.author_id == user.id, models.ForumQuestion.author_id != user.id)
-    ):
+    for created, is_solution in r.answers:
         if _in(created, bounds):
             answers += 1
-            solutions += bool(is_solution)
-
-    associations = db.query(func.count(models.Membership.id)).filter(
-        models.Membership.user_id == user.id, models.Membership.status == "approved").scalar() or 0
-
-    organized = 0
-    led = [aid for (aid,) in db.query(models.Membership.association_id).filter(
-        models.Membership.user_id == user.id, models.Membership.role == "leader")]
-    if led:
-        for event in db.query(models.Event).filter(models.Event.created_by_id == user.id,
-                                                   models.Event.association_id.in_(led)).all():
-            came = sum(r.attended is True for r in event.registrations if r.user_id != user.id)
-            took_place = came >= ORGANIZED_MIN_PEOPLE
-            if _as_utc(event.ends_at) <= now and took_place and _in(event.starts_at, bounds):
-                organized += 1
-
+            solutions += is_solution
+    organized = sum(1 for starts, ends, came in r.organized
+                    if _as_utc(ends) <= now and came >= ORGANIZED_MIN_PEOPLE and _in(starts, bounds))
     return {
-        "events": events, "volunteer": volunteer, "association_events": association_events, "meetings": meetings, "on_time": on_time, "late": late,
-        "homework": homework, "answers": answers, "solutions": solutions,
-        "associations": associations, "organized": organized,
+        "events": events, "volunteer": volunteer, "association_events": association_events,
+        "meetings": sum(1 for starts in r.meetings if _in(starts, bounds)), "on_time": on_time, "late": late,
+        "homework": sum(1 for created in r.homework if _in(created, bounds)), "answers": answers, "solutions": solutions,
+        "associations": r.associations, "organized": organized,
     }
+
+
+def facts(db: Session, user: models.User, bounds: Optional[Tuple[datetime, datetime]] = None) -> Dict[str, int]:
+    """Counts of confirmed actions, overall or within a period."""
+    return _count(_collect(db, [user.id])[user.id], bounds, datetime.now(timezone.utc))
 
 
 def points(f: Dict[str, int], capped: bool) -> int:
@@ -199,6 +239,17 @@ def earned_between(db: Session, user: models.User, first: date, last: date) -> i
     for s, e in _semester_starts(first, last):
         total += points(facts(db, user, _msk_bounds(max(s, first), min(e, last))), capped=True)
     return total
+
+
+def earned_between_many(db: Session, spans: Dict[int, Tuple[date, date]]) -> Dict[int, int]:
+    """earned_between for many people at once ({user id: (first day, last day)}): a tournament's standings."""
+    raw = _collect(db, list(spans))
+    now = datetime.now(timezone.utc)
+    out = {}
+    for uid, (first, last) in spans.items():
+        out[uid] = sum(points(_count(raw[uid], _msk_bounds(max(s, first), min(e, last)), now), capped=True)
+                       for s, e in _semester_starts(first, last)) if first <= last else 0
+    return out
 
 
 def earned_total(db: Session, user: models.User) -> int:

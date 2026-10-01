@@ -143,7 +143,9 @@ def _anonymize(db: Session, target: models.User, actor: models.User) -> List[str
         target.username = f"deleted-{uid}-{secrets.token_hex(4)}"
         target.full_name = DELETED_NAME
         target.email = target.group_number = target.eios_group_id = target.sdo_id = None
-        target.avatar_url = target.vk_url = target.max_contact = None
+        if target.photo_name:
+            files.append(target.photo_name)
+        target.avatar_url = target.vk_url = target.max_contact = target.photo_name = None
         target.pd_consent_at = target.pd_consent_version = target.sdo_synced_at = None
         target.hashed_password = security.get_password_hash(secrets.token_urlsafe(32))
         target.role, target.auth_source, target.is_blocked = "student", "deleted", True

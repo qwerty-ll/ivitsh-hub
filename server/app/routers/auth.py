@@ -1,17 +1,19 @@
 import logging
+import os
 import re
 import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Response, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status, Response, Request
+from fastapi.responses import FileResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core import rate_limit
 from app.db.database import get_db
-from app.services import eios, sdo
+from app.services import eios, sdo, uploads
 import app.models as models
 import app.schemas as schemas
 import app.core.security as security
@@ -41,14 +43,21 @@ def _safe_avatar_url(url: Optional[str]) -> Optional[str]:
     return url
 
 
+# Uploaded profile photos are shrunk to fit this square
+PHOTO_SIDE = 512
+
+
 def _user_response(user: models.User) -> schemas.UserResponse:
     response = schemas.UserResponse.model_validate(user)
     response.userpictureurl = user.avatar_url
+    if user.photo_name:
+        # The stored name changes with every upload: a new photo is a new address for the browser cache
+        response.photo_url = f"/api/v1/auth/me/photo?v={user.photo_name[:12]}"
     return response
 
 
-def _login_response(response: Response, user: models.User) -> schemas.LoginResponse:
-    security.set_auth_cookie(response, security.create_access_token(user.username))
+def _login_response(response: Response, user: models.User, remember: bool = False) -> schemas.LoginResponse:
+    security.set_auth_cookie(response, security.create_access_token(user.username, remember=remember), remember)
     return schemas.LoginResponse(user=_user_response(user))
 
 
@@ -217,7 +226,7 @@ async def eios_login(
     # SDO shares the EIOS password: refresh the course list after the response, never delaying the sign-in
     if settings.SDO_BASE_URL:
         background.add_task(sdo.sync_courses, db_user.id, username, password)
-    return _login_response(response, db_user)
+    return _login_response(response, db_user, remember=req.remember)
 
 
 @router.get("/me", response_model=schemas.UserResponse)
@@ -262,6 +271,46 @@ def update_my_profile(
     return _user_response(current_user)
 
 
+@router.post("/me/photo", response_model=schemas.UserResponse)
+async def upload_my_photo(
+    request: Request,
+    name: str = Query("photo.jpg", min_length=1, max_length=200),
+    current_user: models.User = Depends(security.require_current_user),
+    db: Session = Depends(get_db),
+):
+    """The profile photo, kept on the server so it follows the user to every device. Only they see it."""
+    uploads.check_declared_size(request)
+    stored, _, _ = await uploads.save(request.stream(), name, images_only=True, max_side=PHOTO_SIDE)
+    old, current_user.photo_name = current_user.photo_name, stored
+    db.commit()
+    db.refresh(current_user)
+    uploads.delete([old])
+    return _user_response(current_user)
+
+
+@router.delete("/me/photo", response_model=schemas.UserResponse)
+def delete_my_photo(
+    current_user: models.User = Depends(security.require_current_user),
+    db: Session = Depends(get_db),
+):
+    old, current_user.photo_name = current_user.photo_name, None
+    db.commit()
+    db.refresh(current_user)
+    uploads.delete([old])
+    return _user_response(current_user)
+
+
+@router.get("/me/photo")
+def my_photo(current_user: models.User = Depends(security.require_current_user)):
+    if not current_user.photo_name:
+        raise HTTPException(status_code=404, detail="Фото не загружено")
+    path = uploads.path_of(current_user.photo_name)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Фото не найдено")
+    return FileResponse(path, headers={"Cache-Control": "private, max-age=3600",
+                                       "X-Content-Type-Options": "nosniff"})
+
+
 @router.post("/logout")
 def logout(
     request: Request,
@@ -272,6 +321,7 @@ def logout(
     auth_token = security.extract_token(request, token)
     payload = security.decode_access_token(auth_token) if auth_token else None
     if payload:
-        security.revoke_token(payload["jti"], db)
+        # The whole session: tokens renewed earlier in it stop working too
+        security.revoke_token(payload.get("sid") or payload["jti"], db)
     security.clear_auth_cookie(response)
     return {"message": "Успешный выход из системы"}

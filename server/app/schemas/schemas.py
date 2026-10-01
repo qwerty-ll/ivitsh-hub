@@ -58,6 +58,8 @@ class EiosLoginRequest(BaseModel):
     group_number: Optional[str] = Field(None, max_length=50)
     # The "I agree to personal data processing" box at sign-in; nothing is sent to EIOS without it
     consent: bool = False
+    # "Не выходить на этом устройстве": the session survives two weeks without visits instead of a day
+    remember: bool = False
 
 class UserUpdateProfile(BaseModel):
     group_number: Optional[str] = Field(None, max_length=50)
@@ -86,6 +88,8 @@ class UserResponse(BaseModel):
     eios_group_id: Optional[int] = None
     email: Optional[str] = None
     userpictureurl: Optional[str] = None
+    # The photo the user uploaded (own profile only); userpictureurl is the EIOS one
+    photo_url: Optional[str] = None
     auth_source: str = "eios"
     is_blocked: bool = False
     vk_url: Optional[str] = None

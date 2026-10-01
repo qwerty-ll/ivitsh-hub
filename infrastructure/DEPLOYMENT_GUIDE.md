@@ -112,7 +112,13 @@ docker compose -f infrastructure/docker-compose.yml up -d --build
 - **`infrastructure/docker/Dockerfile.client`** — сборка SPA на Node 20 и `nginx:1.27-alpine`.
   Конфигурация: `infrastructure/nginx/default.conf`, заголовки безопасности и CSP — `infrastructure/nginx/snippets/`.
 - **`infrastructure/docker/Dockerfile.server`** — Python 3.11-slim, запуск от непривилегированного пользователя,
-  один процесс uvicorn (ограничения частоты запросов и кэш расписания хранятся в памяти процесса).
+  `WEB_CONCURRENCY` процессов uvicorn (в продакшн-compose — 2). Общее для них — лимиты частоты, снимок турнира
+  трайбов, число занятых потоков GigaChat — лежит в Redis (сервис `redis`, `REDIS_URL`); миграции и начальные данные
+  при старте выполняет один процесс (блокировка PostgreSQL). Больше одного процесса — только с Redis и PostgreSQL,
+  иначе backend не запустится с понятной ошибкой. Кэш расписания у каждого процесса свой — это только скорость.
+  Сколько ставить: по числу ядер сервера, но не больше 4 (пул соединений к БД делится между процессами,
+  вместе они укладываются в 100 соединений PostgreSQL). Standalone-сборка (`docker-compose.yml` в корне,
+  SQLite) всегда работает одним процессом.
 
 ---
 

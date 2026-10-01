@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authApi, clearApiCache, SESSION_EXPIRED_EVENT } from '../services/api';
+import { dataUrlToBlob } from '../utils/avatar';
 
 const AuthContext = createContext(null);
 const AUTH_STORAGE_KEY = 'portal_auth_user';
@@ -22,8 +23,7 @@ const clearUserStorage = () => {
   clearApiCache();
 };
 
-// A photo the user picks is kept in this browser per account (it is never uploaded), apart from the
-// session cache: a reload, an expired session or signing out does not lose it.
+// Older versions kept a chosen photo only in the browser under this key; it is moved to the server once.
 const avatarKey = (id) => `portal_avatar_${id}`;
 const readAvatar = (id) => {
   try { return id ? localStorage.getItem(avatarKey(id)) : null; } catch { return null; }
@@ -40,15 +40,17 @@ const toClientUser = (apiUser) => ({
   // The .env administrator: the only one who grants and revokes administrator rights
   mainAdmin: apiUser.auth_source === 'local',
   serverPhotoUrl: apiUser.userpictureurl || '',
+  // The photo the user uploaded (kept on the server)
+  customPhotoUrl: apiUser.photo_url || '',
 });
 
-// photoUrl shown in the UI: the chosen photo, else the EIOS picture
+// photoUrl shown in the UI: the uploaded photo, else the EIOS picture
 const withPhoto = (u) => {
-  const custom = readAvatar(u.id);
+  const custom = u.customPhotoUrl || '';
   return { ...u, photoUrl: custom || u.serverPhotoUrl || '', hasCustomPhoto: !!custom };
 };
 
-// Profiles cached by older versions kept a chosen photo inline; move it to its own key.
+// Profiles cached by older versions kept a chosen photo inline; move it to its own key (uploaded later).
 const fromCache = (cached) => {
   const inline = typeof cached.photoUrl === 'string' && cached.photoUrl.startsWith('data:') ? cached.photoUrl : '';
   if (inline && !readAvatar(cached.id)) {
@@ -83,6 +85,17 @@ export const AuthProvider = ({ children }) => {
       }
     } catch { /* storage unavailable */ }
   }, []);
+
+  // A photo an older version kept only in this browser goes to the server once, then leaves the browser
+  const migrateLocalPhoto = useCallback((id, serverHasPhoto) => {
+    const local = readAvatar(id);
+    if (!local) return;
+    const forget = () => safeRemove(avatarKey(id));
+    if (serverHasPhoto || !local.startsWith('data:image/')) { forget(); return; }
+    authApi.uploadPhoto(dataUrlToBlob(local))
+      .then((res) => { forget(); saveUser(toClientUser(res)); })
+      .catch(() => { /* try again on the next visit */ });
+  }, [saveUser]);
 
   // Set when the server ended the session on its own, so the login form can explain why.
   const [sessionExpired, setSessionExpired] = useState(false);
@@ -120,6 +133,7 @@ export const AuthProvider = ({ children }) => {
           return;
         }
         const fresh = toClientUser(res);
+        migrateLocalPhoto(res.id, !!fresh.customPhotoUrl);
         let cached = null;
         try { cached = JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || 'null'); } catch { /* ignore */ }
         // A different account is signed in now: drop the previous person's local data.
@@ -133,7 +147,7 @@ export const AuthProvider = ({ children }) => {
         }
       })
       .finally(() => setSessionChecked(true));
-  }, [saveUser, resetSession]);
+  }, [saveUser, resetSession, migrateLocalPhoto]);
 
   const completeLogin = (res) => {
     if (!res || !res.user) return { error: 'Не удалось авторизоваться' };
@@ -141,13 +155,14 @@ export const AuthProvider = ({ children }) => {
     setSessionExpired(false);
     const nextUser = toClientUser(res.user);
     saveUser(nextUser);
+    migrateLocalPhoto(res.user.id, !!nextUser.customPhotoUrl);
     return nextUser;
   };
 
   // Student login through EIOS KSU (credentials are checked by the backend)
-  const login = async (loginInput, groupInput = '', passwordInput = '', consent = false) => {
+  const login = async (loginInput, groupInput = '', passwordInput = '', consent = false, remember = false) => {
     try {
-      return completeLogin(await authApi.eiosLogin(loginInput.trim(), passwordInput, groupInput.trim(), consent));
+      return completeLogin(await authApi.eiosLogin(loginInput.trim(), passwordInput, groupInput.trim(), consent, remember));
     } catch (err) {
       return { error: err.message || 'Ошибка входа через ЭИОС КГУ. Проверьте логин и пароль' };
     }
@@ -171,20 +186,16 @@ export const AuthProvider = ({ children }) => {
     clearUserStorage();
   };
 
-  // photoUrl: a data URL to keep as the chosen photo, or null to go back to the EIOS picture.
-  // Returns false when the browser refused to store the photo.
   const updateUserProfile = (data = {}) => {
     if (!user) return false;
-    if (data.photoUrl !== undefined) {
-      try {
-        if (data.photoUrl) localStorage.setItem(avatarKey(user.id), data.photoUrl);
-        else localStorage.removeItem(avatarKey(user.id));
-      } catch {
-        return false;
-      }
-    }
     saveUser({ ...user, ...(data.group !== undefined ? { group: data.group } : {}) });
     return true;
+  };
+
+  // Uploads a new profile photo (a Blob) or, with null, removes it; throws ApiError on failure
+  const setPhoto = async (blob) => {
+    const res = blob ? await authApi.uploadPhoto(blob) : await authApi.deletePhoto();
+    saveUser(toClientUser(res));
   };
 
   const isLoggedIn = !!user;
@@ -196,6 +207,7 @@ export const AuthProvider = ({ children }) => {
   return (
     <AuthContext.Provider value={{
       user,
+      setPhoto,
       sessionChecked,
       isLoggedIn,
       isAdmin,

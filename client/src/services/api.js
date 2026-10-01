@@ -137,8 +137,9 @@ const json = (method, body) => ({ method, body: JSON.stringify(body) });
 // Auth Services
 export const authApi = {
   // consent: the "I agree to personal data processing" box; the server refuses the sign-in without it
-  eiosLogin: (username, password, groupNumber = '', consent = false) =>
-    apiFetch('/api/v1/auth/eios-login', json('POST', { username, password, group_number: groupNumber, consent })),
+  // remember: "Не выходить на этом устройстве"
+  eiosLogin: (username, password, groupNumber = '', consent = false, remember = false) =>
+    apiFetch('/api/v1/auth/eios-login', json('POST', { username, password, group_number: groupNumber, consent, remember })),
   adminLogin: (username, password) =>
     apiFetch('/api/v1/auth/admin-login', json('POST', { username, password })),
   logout: () =>
@@ -148,6 +149,13 @@ export const authApi = {
   // { user } or { user: null } for a guest — never a 401
   getSession: () =>
     apiFetch('/api/v1/auth/session'),
+  // The profile photo lives on the server (only its owner sees it); answers with the updated profile
+  uploadPhoto: (blob) =>
+    apiFetch('/api/v1/auth/me/photo?name=photo.jpg', {
+      method: 'POST', body: blob, timeout: 60000, headers: { 'Content-Type': blob.type || 'image/jpeg' },
+    }),
+  deletePhoto: () =>
+    apiFetch('/api/v1/auth/me/photo', { method: 'DELETE' }),
   updateProfile: (data) =>
     apiFetch('/api/v1/auth/me', json('PATCH', data)),
 };

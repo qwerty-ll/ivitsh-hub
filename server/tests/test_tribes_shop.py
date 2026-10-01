@@ -1,13 +1,22 @@
+import io
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
+from PIL import Image
 
 import app.models as models
 from app.db.database import SessionLocal
 from app.services import tribes as tribes_service
 from conftest import CSRF, login_admin, login_student
 
-PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+
+def _png() -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), "orange").save(buf, "PNG")
+    return buf.getvalue()
+
+
+PNG = _png()
 
 
 @pytest.fixture(autouse=True)
@@ -131,4 +140,4 @@ def test_shop_pictures(app, fake_eios):
     r = admin.post(f"/api/v1/shop/items/{item['id']}/image", params={"name": "mug.png"}, content=PNG, headers=CSRF)
     assert r.status_code == 200 and r.json()["image"]
     from fastapi.testclient import TestClient
-    assert TestClient(app).get(f"/api/v1/shop/items/{item['id']}/image").content == PNG
+    assert TestClient(app).get(f"/api/v1/shop/items/{item['id']}/image").content.startswith(b"\x89PNG")

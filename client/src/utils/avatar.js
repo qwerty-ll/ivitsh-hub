@@ -1,8 +1,8 @@
 export const initialsOf = (name = '') =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 
-// A chosen profile photo is cropped to a square and shrunk to a small JPEG (about 20 KB),
-// so it fits browser storage on every device — a multi-megabyte photo does not fit in Safari.
+// A chosen profile photo is cropped to a square and shrunk to a small JPEG (about 20 KB) before upload:
+// a multi-megabyte phone photo would be slow on campus Wi-Fi and the server shrinks it anyway.
 export const shrinkAvatar = (file, size = 256) => new Promise((resolve, reject) => {
   const url = URL.createObjectURL(file);
   const img = new Image();
@@ -24,3 +24,13 @@ export const shrinkAvatar = (file, size = 256) => new Promise((resolve, reject) 
   };
   img.src = url;
 });
+
+// A photo older versions kept in the browser as a data URL, turned back into a file to upload
+export const dataUrlToBlob = (dataUrl) => {
+  const [head, body] = dataUrl.split(',');
+  const type = (head.match(/^data:([^;]+)/) || [])[1] || 'image/jpeg';
+  const bytes = atob(body || '');
+  const out = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) out[i] = bytes.charCodeAt(i);
+  return new Blob([out], { type });
+};
