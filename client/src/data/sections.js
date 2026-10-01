@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, CalendarDays, CalendarSearch, SquareKanban, Handshake, PartyPopper, DoorOpen, Swords, ShoppingBag, MessageSquare, Map, Users, HelpCircle, UserSquare, Shield, Lock
+  LayoutDashboard, CalendarDays, CalendarSearch, SquareKanban, Handshake, PartyPopper, DoorOpen, Swords, ShoppingBag, MessageSquare, Map, Users, HelpCircle, UserSquare, Shield, Lock, Coins, LifeBuoy
 } from 'lucide-react';
 
 // One place for every section's name, route, icon and wayfinding hue.
@@ -17,23 +17,61 @@ export const SECTIONS = {
   booking: { label: 'Бронь 108', short: 'Бронь', path: '/booking', Icon: DoorOpen, hue: 'cyan', hint: 'Коворкинг и ноутбуки', auth: true },
   forum: { label: 'Форум', short: 'Форум', path: '/forum', Icon: MessageSquare, hue: 'violet', hint: 'Спросить сокурсников' },
   map: { label: 'Карта кампуса', short: 'Карта', path: '/map', Icon: Map, hue: 'green', hint: 'Найти аудиторию' },
-  teachers: { label: 'Преподаватели', short: 'Преподаватели', path: '/teachers', Icon: Users, hue: 'pink', hint: 'Кабинеты и почта' },
+  teachers: { label: 'Преподаватели', short: 'Педагоги', path: '/teachers', Icon: Users, hue: 'pink', hint: 'Кабинеты и почта' },
   faq: { label: 'Вопросы и ответы', short: 'FAQ', path: '/faq', Icon: HelpCircle, hue: 'amber', hint: 'Частые вопросы' },
   profile: { label: 'Личный кабинет', short: 'Профиль', path: '/profile', Icon: UserSquare, hue: 'cyan' },
   admin: { label: 'Панель управления', short: 'Админка', path: '/admin', Icon: Shield, hue: 'slate' },
   privacy: { label: 'Конфиденциальность', short: 'Cookie', path: '/privacy', Icon: Lock, hue: 'slate' },
 };
 
+// Related sections share one menu entry and show tabs on top of their pages (nothing is removed: every page
+// keeps its address). The entry leads to the first tab the visitor can open.
+export const HUBS = {
+  calendar: { label: 'Календарь', short: 'Календарь', Icon: CalendarDays, hue: 'orange', tabs: ['calendar', 'schedule'], hint: 'Пары, собрания, расписание' },
+  bits: { label: 'Биты', short: 'Биты', Icon: Coins, hue: 'violet', tabs: ['tribes', 'shop'], hint: 'Трайбы и магазин мерча' },
+  help: { label: 'Помощь', short: 'Помощь', Icon: LifeBuoy, hue: 'amber', tabs: ['forum', 'map', 'teachers', 'faq'], hint: 'Форум, карта, преподаватели, FAQ' },
+};
+
+// Tabs of a hub the visitor can open (guests: no personal sections)
+export const hubTabs = (hubId, isLoggedIn) => HUBS[hubId].tabs.filter(id => isLoggedIn || !SECTIONS[id].auth);
+
+// The hub whose tab page this is (exact section pages only, not e.g. a forum question)
+export const hubOfPath = (pathname) => Object.keys(HUBS).find(
+  hubId => HUBS[hubId].tabs.some(id => SECTIONS[id].path === pathname),
+);
+
+// One menu entry: a section, or a hub ("hub:<id>") standing for its tabs
+export const navEntry = (id, isLoggedIn) => {
+  if (!id.startsWith('hub:')) {
+    const s = SECTIONS[id];
+    return { key: id, ...s, paths: [s.path], hidden: !isLoggedIn && s.auth };
+  }
+  const hubId = id.slice(4);
+  const hub = HUBS[hubId];
+  const tabs = hubTabs(hubId, isLoggedIn);
+  const first = tabs[0] && SECTIONS[tabs[0]];
+  return {
+    key: id, ...hub,
+    // A guest's "Календарь" is the public timetable
+    label: tabs.length === 1 ? first.label : hub.label,
+    short: tabs.length === 1 ? first.short : hub.short,
+    Icon: tabs.length === 1 ? first.Icon : hub.Icon,
+    path: first ? first.path : '/',
+    paths: tabs.map(t => SECTIONS[t].path),
+    hidden: tabs.length === 0,
+  };
+};
+
 // Sidebar groups; the profile opens from the user button at the bottom of the sidebar.
 export const NAV_GROUPS = [
   { title: null, items: ['dashboard'] },
-  { title: 'Учёба', items: ['calendar', 'schedule', 'tasks'] },
-  { title: 'Студжизнь', items: ['associations', 'events', 'tribes', 'shop', 'booking'] },
-  { title: 'Помощь', items: ['forum', 'map', 'teachers', 'faq'] },
+  { title: 'Учёба', items: ['hub:calendar', 'tasks'] },
+  { title: 'Студжизнь', items: ['associations', 'events', 'booking', 'hub:bits'] },
+  { title: null, items: ['hub:help'] },
 ];
 
 // Mobile bottom bar: the sections students open most; the rest stay in the menu.
-// Guests have no calendar or tasks of their own: they get the public timetable and events instead.
-export const TAB_BAR_ORDER = ['dashboard', 'calendar', 'tasks', 'associations', 'profile'];
-const GUEST_TABS = { calendar: 'schedule', tasks: 'events' };
+// Guests have no tasks of their own: they get the events instead (the calendar hub turns into the timetable).
+export const TAB_BAR_ORDER = ['dashboard', 'hub:calendar', 'tasks', 'associations', 'profile'];
+const GUEST_TABS = { tasks: 'events' };
 export const tabBarOrder = (isLoggedIn) => (isLoggedIn ? TAB_BAR_ORDER : TAB_BAR_ORDER.map(id => GUEST_TABS[id] || id));

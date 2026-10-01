@@ -1,8 +1,8 @@
 import React from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { PanelLeftClose, PanelLeftOpen, LogIn, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { SECTIONS, NAV_GROUPS } from '../data/sections';
+import { NAV_GROUPS, navEntry } from '../data/sections';
 
 const ICON = { size: 20, strokeWidth: 1.75, 'aria-hidden': true };
 
@@ -14,9 +14,9 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen })
   const { user, isLoggedIn, isAdmin } = useAuth();
 
   const all = isAdmin ? [...NAV_GROUPS, { title: 'Управление', items: ['admin'] }] : NAV_GROUPS;
-  // Guests see only what works without signing in
-  const groups = isLoggedIn ? all : all
-    .map(group => ({ ...group, items: group.items.filter(id => !SECTIONS[id].auth) }))
+  // Guests see only what works without signing in; a hub stands for all its tabs
+  const groups = all
+    .map(group => ({ ...group, items: group.items.map(id => navEntry(id, isLoggedIn)).filter(e => !e.hidden) }))
     .filter(group => group.items.length > 0);
 
   const goTo = (path) => {
@@ -41,24 +41,25 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen })
       </NavLink>
 
       <nav className="sidebar-nav">
-        {groups.map(({ title, items }) => (
-          <div key={title || 'main'} className="sidebar-group" role="group" aria-label={title || undefined}>
+        {groups.map(({ title, items }, gi) => (
+          <div key={title || `group-${gi}`} className="sidebar-group" role="group" aria-label={title || undefined}>
             {title && <p className="sidebar-group-title" aria-hidden="true">{title}</p>}
             <ul>
-              {items.map((id) => {
-                const { label, path, Icon, hue } = SECTIONS[id];
+              {items.map(({ key, label, path, paths, Icon, hue }) => {
+                // A hub is active on any of its tabs
+                const active = path === '/' ? pathname === '/' : paths.some(p => pathname === p || pathname.startsWith(`${p}/`));
                 return (
-                  <li key={id}>
-                    <NavLink
+                  <li key={key}>
+                    <Link
                       to={path}
-                      end={path === '/'}
-                      className={({ isActive }) => `sidebar-link hue-${hue} ${isActive ? 'active' : ''}`}
+                      className={`sidebar-link hue-${hue} ${active ? 'active' : ''}`}
+                      aria-current={active ? 'page' : undefined}
                       title={isCollapsed ? label : undefined}
                       onClick={() => setIsMobileOpen(false)}
                     >
                       <Icon {...ICON} />
                       <span className="sidebar-link-label">{label}</span>
-                    </NavLink>
+                    </Link>
                   </li>
                 );
               })}

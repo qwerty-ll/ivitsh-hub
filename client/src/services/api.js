@@ -162,6 +162,9 @@ export const authApi = {
 
 // Forum Services
 export const forumApi = {
+  // How many threads someone started (the list's X-Total-Count, one row fetched)
+  countByAuthor: (authorId) =>
+    apiFetch(`/api/v1/forum/questions?limit=1&author_id=${authorId}`, { withTotal: true }).then(r => r.total),
   getQuestions: (category = '', search = '', limit = 50, offset = 0, authorId = null) => {
     const query = new URLSearchParams({ limit, offset });
     if (category) query.append('category', category);
@@ -219,6 +222,8 @@ export const adminApi = {
   // Anonymizes the account; purge erases an already anonymized one with its history
   deleteUser: (userId, purge = false) =>
     apiFetch(`/api/v1/admin/users/${userId}${purge ? '?purge=true' : ''}`, { method: 'DELETE' }),
+  // What waits for a decision in every section, and who uses the portal
+  getOverview: () => apiFetch('/api/v1/admin/overview'),
   getActions: (limit = 50, offset = 0) =>
     apiFetch(`/api/v1/admin/actions?limit=${limit}&offset=${offset}`, { withTotal: true }),
   // Forum moderation: a page of threads with the total

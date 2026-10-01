@@ -157,8 +157,11 @@ a.dash-hero-room {
   margin: calc(-1 * var(--space-4)) var(--space-4) calc(-1 * var(--space-6)) 0;
 }
 
-/* ---------- Section shortcuts ---------- */
+/* ---------- Section shortcuts: phones and tablets only, the sidebar shows them on a computer ---------- */
 .dash-shortcuts { margin-bottom: var(--space-6); }
+@media (min-width: 1025px) {
+  .dash-shortcuts { display: none; }
+}
 .dash-shortcuts ul {
   list-style: none;
   display: grid;

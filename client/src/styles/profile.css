@@ -728,3 +728,18 @@ a.profile-assoc-row { display: flex; }
 @media (prefers-reduced-motion: reduce) and (hover: hover) {
   .chat-toggle:hover { transform: none; }
 }
+
+/* Two tabs instead of one long page */
+.profile-main { gap: var(--space-6); }
+.profile-tabs { align-self: flex-start; }
+.profile-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  min-width: 0;
+}
+@media (max-width: 768px) {
+  .profile-panel { gap: var(--space-10); }
+  .profile-tabs { align-self: stretch; }
+  .profile-tabs .segmented-item { flex: 1 1 0; justify-content: center; min-height: var(--touch-target); }
+}

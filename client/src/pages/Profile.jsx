@@ -4,7 +4,7 @@ import {
   LogIn, LogOut, Camera, AlertCircle, Clock, Loader2, Eye, EyeOff, CalendarDays,
   Smartphone, Share
 } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { forumApi, progressApi } from '../services/api';
@@ -56,18 +56,18 @@ const Profile = () => {
   // Activity stats from the API
   const [forumQuestionsCount, setForumQuestionsCount] = useState(0);
   const [progress, setProgress] = useState(null);
-  // /profile#achievements (from the dashboard) opens at the badges once they are loaded
+  // Two tabs instead of one long page; /profile#achievements (from the dashboard) opens the second one
   const { hash } = useLocation();
-  useEffect(() => {
-    if (progress && hash === '#achievements') document.getElementById('achievements')?.scrollIntoView({ block: 'start' });
-  }, [progress, hash]);
+  const navigate = useNavigate();
+  const tab = hash === '#achievements' ? 'achievements' : 'profile';
+  const openTab = (id) => navigate({ hash: id === 'achievements' ? '#achievements' : '' }, { replace: true });
 
   useEffect(() => {
     if (!user) return;
     progressApi.get().then(setProgress).catch(() => setProgress(null));
 
-    forumApi.getQuestions('', '', 200, 0, user.id)
-      .then(res => setForumQuestionsCount(Array.isArray(res) ? res.length : 0))
+    forumApi.countByAuthor(user.id)
+      .then(total => setForumQuestionsCount(total || 0))
       .catch(() => {});
   }, [user?.id]);
 
@@ -418,8 +418,20 @@ const Profile = () => {
         </section>
 
         <div className="profile-main">
+          <div className="segmented profile-tabs" role="tablist" aria-label="Разделы кабинета">
+            {[['profile', 'Профиль'], ['achievements', 'Достижения и биты']].map(([id, label]) => (
+              <button key={id} type="button" role="tab" id={`profile-tab-${id}`} aria-selected={tab === id}
+                aria-controls={`profile-panel-${id}`} className={`segmented-item ${tab === id ? 'active' : ''}`}
+                onClick={() => openTab(id)}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'achievements' && (
+          <div id="profile-panel-achievements" role="tabpanel" aria-labelledby="profile-tab-achievements" className="profile-panel">
           {/* ACHIEVEMENTS: level, points ("биты") and badges */}
-          {progress && (
+          {progress ? (
             <section id="achievements" aria-labelledby="profile-achievements-title">
               <div className="section-header">
                 <h2 id="profile-achievements-title">Достижения</h2>
@@ -430,6 +442,8 @@ const Profile = () => {
                 <PointsRules rules={progress.rules} caps={progress.caps} />
               </div>
             </section>
+          ) : (
+            <span className="skeleton" style={{ width: '100%', height: '12rem' }} />
           )}
 
           {/* REAL STATISTICS */}
@@ -453,7 +467,11 @@ const Profile = () => {
               </li>
             </ul>
           </section>
+          </div>
+          )}
 
+          {tab === 'profile' && (
+          <div id="profile-panel-profile" role="tabpanel" aria-labelledby="profile-tab-profile" className="profile-panel">
           {/* ASSOCIATIONS & ACHIEVEMENTS, CONTACTS FOR LEADERS */}
           <ProfileAssociations />
           <ProfileContacts />
@@ -487,6 +505,8 @@ const Profile = () => {
               </li>
             </ul>
           </section>
+          </div>
+          )}
         </div>
       </div>
     </div>

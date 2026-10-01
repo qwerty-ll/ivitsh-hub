@@ -451,3 +451,27 @@ def test_session_cap_asks_for_the_password_again(app, fake_eios):
     fresh = TestClient(app)
     fresh.cookies.set("portal_token", security.create_access_token("24-isbo-001", auth_time=long_ago + timedelta(days=2)))
     assert fresh.get("/api/v1/auth/session").json()["user"]["username"] == "24-isbo-001"
+
+
+# --- Admin overview: what waits for a decision, who uses the portal ---
+
+def test_admin_overview_counts_queues_and_courses(app, fake_eios, db):
+    from datetime import date
+    from app.routers.admin import course_of
+    assert course_of("24-ИСбо-1", date(2026, 10, 1)) == 3 and course_of("26-ИБбо-2", date(2026, 10, 1)) == 1
+    assert course_of("26-ИБбо-2", date(2027, 3, 1)) == 1 and course_of("Деканат", date(2026, 10, 1)) is None
+    admin = login_admin(app)
+    for username, eios_id, group in [("24-isbo-001", "1", "24-ИСбо-1"), ("26-isbo-002", "2", "26-ИСбо-1")]:
+        # Any visit after signing in marks the student active this semester
+        login_student(app, fake_eios, username, eios_id=eios_id, group=group).get("/api/v1/auth/session")
+    item = models.ShopItem(title="Кружка", price=5)
+    db.add(item)
+    db.flush()
+    db.add(models.ShopOrder(user_id=_uid(db, "24-isbo-001"), item_id=item.id, item_title="Кружка", price=5, status="new"))
+    db.add(models.ForumQuestion(author_id=_uid(db, "24-isbo-001"), title="Без ответа", content="Есть кто?", category="Учеба"))
+    db.commit()
+    data = admin.get("/api/v1/admin/overview").json()
+    assert data["students"]["total"] == 2 and data["students"]["active_semester"] == 2
+    assert {c["course"]: c["total"] for c in data["students"]["by_course"]} == {1: 1, 3: 1}
+    assert data["waiting"]["orders_new"] == 1 and data["waiting"]["forum_unanswered"] == 1
+    assert login_student(app, fake_eios, "24-isbo-001", eios_id="1").get("/api/v1/admin/overview").status_code == 403

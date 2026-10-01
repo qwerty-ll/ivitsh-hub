@@ -253,7 +253,9 @@ const Shop = () => {
   const toast = useToast();
   const [data, setData] = useState(null);
   // The portal's own admin account earns no bits: it only runs the shop
-  const [tab, setTab] = useState(isMainAdmin ? 'admin' : 'shop');
+  // ?tab=admin (from the admin overview) opens the orders queue
+  const asked = new URLSearchParams(window.location.search).get('tab');
+  const [tab, setTab] = useState(asked === 'admin' && isAdmin ? 'admin' : (isMainAdmin ? 'admin' : 'shop'));
   const [buying, setBuying] = useState(null);
   const [busy, setBusy] = useState(false);
 

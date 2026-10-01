@@ -9,6 +9,7 @@ import SectionIcon from '../components/SectionIcon';
 import { Field, Toolbar, RefreshButton, ListSkeleton, RowActions } from '../components/admin/AdminUi';
 import AdminAssociations from '../components/admin/AdminAssociations';
 import AdminUsers from '../components/admin/AdminUsers';
+import AdminOverview from '../components/admin/AdminOverview';
 
 const ICON = { size: 16, strokeWidth: 1.75, 'aria-hidden': true };
 
@@ -32,7 +33,7 @@ const AdminPanel = () => {
   const navigate = useNavigate();
   const toast = useToast();
   const tabRefs = useRef({});
-  const [activeTab, setActiveTab] = useState('announcements');
+  const [activeTab, setActiveTab] = useState('overview');
   const [associationsCount, setAssociationsCount] = useState(null);
 
   // Redirect non-admins, once the server has confirmed who is signed in (a reload of /admin keeps the page)
@@ -363,6 +364,7 @@ const AdminPanel = () => {
   if (!isAdmin) return null;
 
   const tabs = [
+    { id: 'overview', label: 'Сводка', count: null },
     { id: 'announcements', label: 'Объявления', count: announcements.length },
     { id: 'associations', label: 'Объединения', count: associationsCount },
     { id: 'teachers', label: 'Преподаватели', count: teachers.length },
@@ -425,6 +427,11 @@ const AdminPanel = () => {
           );
         })}
       </div>
+
+      {/* OVERVIEW: queues from every section */}
+      {activeTab === 'overview' && (
+        <AdminOverview panelProps={panelProps('overview')} onOpenTab={setActiveTab} />
+      )}
 
       {/* ANNOUNCEMENTS TAB */}
       {activeTab === 'announcements' && (

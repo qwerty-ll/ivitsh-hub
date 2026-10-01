@@ -1,9 +1,10 @@
+import re
 import secrets
-from datetime import datetime, timezone
-from typing import List, Literal
+from datetime import date, datetime, timedelta, timezone
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import false
+from sqlalchemy import false, func
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.database import get_db
@@ -13,7 +14,7 @@ import app.core.security as security
 from app.core import locks
 from app.routers import shop
 from app.routers.associations import task_files
-from app.services import audit, uploads
+from app.services import audit, pgas, timetable, uploads
 
 router = APIRouter(prefix="/api/v1", tags=["Admin"])
 
@@ -213,6 +214,68 @@ def admin_actions(
         )
         for a in rows
     ]
+
+
+_GROUP_YEAR = re.compile(r"^\s*(\d{2})\s*-")
+
+
+def course_of(group: Optional[str], today: date) -> Optional[int]:
+    """The year of study from a group name ("24-ИСбо-1" entered in 2024 → 3rd year in autumn 2026)."""
+    m = _GROUP_YEAR.match(group or "")
+    if not m:
+        return None
+    year_start = today.year if today.month >= 9 else today.year - 1
+    course = year_start - (2000 + int(m.group(1))) + 1
+    return course if 1 <= course <= 6 else None
+
+
+@router.get("/admin/overview")
+def overview(_: models.User = Depends(security.require_admin), db: Session = Depends(get_db)):
+    """One screen for the administration: what waits for a decision in every section, and who uses the portal."""
+    now = datetime.now(timezone.utc)
+    today = timetable.msk_now().date()
+    sem_start = datetime.combine(pgas.semester_of(today)[0], datetime.min.time(), tzinfo=timetable.MSK)
+    day_start = datetime.combine(today, datetime.min.time(), tzinfo=timetable.MSK)
+    User = models.User
+
+    students = (db.query(User.group_number, User.last_seen_at)
+                .filter(User.role == "student", User.auth_source == "eios").all())
+    by_course: dict = {}
+    active = 0
+    for group, seen in students:
+        seen_now = seen is not None and schemas.as_utc(seen) >= sem_start
+        active += seen_now
+        row = by_course.setdefault(course_of(group, today), [0, 0])
+        row[0] += 1
+        row[1] += seen_now
+    courses = [{"course": c, "total": t, "active": a} for c, (t, a) in sorted(by_course.items(), key=lambda kv: (kv[0] is None, kv[0] or 0))]
+
+    orders = dict(db.query(models.ShopOrder.status, func.count(models.ShopOrder.id))
+                  .filter(models.ShopOrder.status.in_(("new", "ready"))).group_by(models.ShopOrder.status).all())
+    tournament = db.query(models.Tournament).filter(models.Tournament.status == "active").first()
+    answered = db.query(models.ForumAnswer.question_id).distinct()
+    led = db.query(models.Membership.association_id).filter(
+        models.Membership.role == "leader", models.Membership.status == "approved").distinct()
+    return {
+        "students": {"total": len(students), "active_semester": active, "by_course": courses},
+        "waiting": {
+            "orders_new": orders.get("new", 0),
+            "orders_ready": orders.get("ready", 0),
+            "forum_unanswered": db.query(func.count(models.ForumQuestion.id))
+            .filter(models.ForumQuestion.id.notin_(answered)).scalar() or 0,
+            "associations_without_leader": db.query(func.count(models.Association.id))
+            .filter(models.Association.is_active.is_(True), models.Association.id.notin_(led)).scalar() or 0,
+            "applications_pending": db.query(func.count(models.Membership.id))
+            .filter(models.Membership.status == "pending").scalar() or 0,
+        },
+        "today": {
+            "bookings": db.query(func.count(models.Booking.id)).filter(
+                models.Booking.cancelled_at.is_(None), models.Booking.starts_at < day_start + timedelta(days=1),
+                models.Booking.ends_at > max(day_start, now)).scalar() or 0,
+            "events_upcoming": db.query(func.count(models.Event.id)).filter(models.Event.starts_at > now).scalar() or 0,
+        },
+        "tournament": {"id": tournament.id, "title": tournament.title, "ends_on": tournament.ends_on.isoformat()} if tournament else None,
+    }
 
 
 # --- Teachers ---

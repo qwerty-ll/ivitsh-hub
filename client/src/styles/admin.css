@@ -504,3 +504,59 @@
   .admin-filters .select { flex: 1 1 calc(50% - var(--space-2)); }
   .admin-filters-search { max-width: none; }
 }
+
+/* Overview: queues across sections and activity by year of study */
+.admin-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: var(--space-4);
+}
+.admin-overview-wide { grid-column: 1 / -1; }
+.admin-overview-card h3 { font-size: var(--text-md); margin-bottom: var(--space-3); }
+.admin-overview-lead { color: var(--text-2); margin-bottom: var(--space-3); }
+.admin-queues { list-style: none; display: flex; flex-direction: column; }
+.admin-queue {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-target);
+  padding: var(--space-2) 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.admin-queues > li:first-child .admin-queue { border-top: 0; }
+.admin-queue-count {
+  min-width: 2.25rem;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-weight: var(--weight-semibold);
+  text-align: center;
+}
+.admin-queue-count.is-waiting { background: var(--accent-soft); color: var(--accent-deep); }
+.admin-queue-label { flex: 1; min-width: 0; }
+.admin-queue-arrow { color: var(--text-3); flex-shrink: 0; }
+@media (hover: hover) {
+  .admin-queue:hover .admin-queue-label { color: var(--accent-deep); }
+}
+.admin-queue:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
+.admin-bar {
+  display: inline-block;
+  width: 6rem;
+  height: 6px;
+  margin-right: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  vertical-align: middle;
+  overflow: hidden;
+}
+.admin-bar > span { display: block; height: 100%; background: var(--accent); }
+.admin-bar-pct { font-size: var(--text-sm); color: var(--text-2); }

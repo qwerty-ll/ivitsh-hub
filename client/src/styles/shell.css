@@ -369,3 +369,82 @@
     width: auto;
   }
 }
+
+/* ---------- Hub tabs: pages that share one menu entry (Календарь, Биты, Помощь) ---------- */
+.hub-tabs-bar {
+  width: 100%;
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-8) 0;
+}
+/* The page under the tabs needs less air on top */
+.hub-tabs-bar ~ .container { padding-top: var(--space-6); }
+.hub-tabs {
+  list-style: none;
+  display: inline-flex;
+  gap: var(--space-1);
+  max-width: 100%;
+  padding: var(--space-1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.hub-tabs::-webkit-scrollbar { display: none; }
+.hub-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.25rem;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.hub-tab svg { color: var(--text-3); }
+.hub-tab.active {
+  background: var(--tile-soft);
+  color: var(--text);
+  font-weight: var(--weight-semibold);
+  box-shadow: inset 0 0 0 1px var(--tile-edge);
+}
+.hub-tab.active svg { color: var(--tile); }
+.hub-tab-short { display: none; }
+@media (hover: hover) {
+  .hub-tab:not(.active):hover { color: var(--text); background: var(--surface-2); }
+}
+.hub-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 768px) {
+  .hub-tabs-bar { padding: var(--space-4) var(--space-4) 0; }
+  .hub-tabs-bar ~ .container { padding-top: var(--space-4); }
+  .hub-tabs { display: flex; }
+  /* Equal columns, icon over a short name: four tabs fit a 360px phone */
+  .hub-tabs > li { flex: 1 1 0; min-width: 0; }
+  .hub-tab {
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+    width: 100%;
+    min-height: var(--touch-target);
+    padding: var(--space-1);
+    font-size: var(--text-xs);
+  }
+  /* The full name stays for screen readers; the eye gets the short one */
+  .hub-tab-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .hub-tab-short { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hub-tab { transition: none; }
+}

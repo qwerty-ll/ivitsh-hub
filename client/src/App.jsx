@@ -8,6 +8,7 @@ import Sidebar from './components/Sidebar';
 import TabBar from './components/TabBar';
 import ChatWidget from './components/ChatWidget';
 import CookieNotice from './components/CookieNotice';
+import HubTabs from './components/HubTabs';
 
 // Lazy Loaded Pages for Optimal Bundle Splitting
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -102,6 +103,7 @@ function App() {
 
       {/* MAIN CONTENT AREA */}
       <main id="main-content" className="app-main" tabIndex={-1}>
+        <HubTabs />
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<Dashboard />} />

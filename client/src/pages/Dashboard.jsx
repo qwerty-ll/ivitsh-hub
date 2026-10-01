@@ -6,8 +6,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import ScheduleWidget from '../components/ScheduleWidget';
 import { TodayCard, MyTasksCard } from '../components/DashboardToday';
-import SectionIcon from '../components/SectionIcon';
-import { SECTIONS } from '../data/sections';
+import { navEntry } from '../data/sections';
 import { calendarApi, contentApi, eventsApi, progressApi, tasksApi } from '../services/api';
 import { ProgressMini, TIERS } from '../components/Progress';
 import { useToast } from '../context/ToastContext';
@@ -19,8 +18,8 @@ import { plural } from '../utils/plural';
 
 const ICON = { strokeWidth: 1.75, 'aria-hidden': true };
 
-// The tab bar already has the calendar, tasks and associations; these are the other main sections (the rest is in the menu)
-const SHORTCUTS = ['events', 'tribes', 'shop', 'map'];
+// Phones only (on a computer the menu is always in view): what the bottom bar does not have
+const SHORTCUTS = ['events', 'booking', 'hub:bits', 'hub:help'];
 // Guests get sections that work without signing in
 const GUEST_SHORTCUTS = ['events', 'forum', 'map', 'teachers'];
 
@@ -351,11 +350,11 @@ const Dashboard = () => {
       <nav className="dash-shortcuts" aria-label="Разделы портала">
         <ul>
           {(isLoggedIn ? SHORTCUTS : GUEST_SHORTCUTS).map((id) => {
-            const { label, path, hint } = SECTIONS[id];
+            const { label, path, hint, hue, Icon } = navEntry(id, isLoggedIn);
             return (
               <li key={id}>
                 <Link to={path} className="dash-shortcut" onClick={() => markTaskDone(id)}>
-                  <SectionIcon section={id} />
+                  <span className={`tile tile-md hue-${hue}`} aria-hidden="true"><Icon size={20} strokeWidth={1.75} /></span>
                   <span className="dash-shortcut-text">
                     <span className="dash-shortcut-label">{label}</span>
                     <span className="dash-shortcut-hint">{hint}</span>
