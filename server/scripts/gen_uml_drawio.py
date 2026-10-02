@@ -142,7 +142,7 @@ def edge_xml(page, i, e):
         mid = "".join(f'<mxPoint x="{x:g}" y="{y:g}"/>' for x, y in pts[1:-1])
         geo = (f'<mxGeometry relative="1" as="geometry"><mxPoint x="{pts[0][0]:g}" y="{pts[0][1]:g}" as="sourcePoint"/>'
                f'<mxPoint x="{pts[-1][0]:g}" y="{pts[-1][1]:g}" as="targetPoint"/>' + (f'<Array as="points">{mid}</Array>' if mid else ""))
-    return (f'<mxCell id="e{i}" value="{escape(e["label"])}" style="{style}" edge="1" parent="1"{attrs}>{geo}</mxGeometry></mxCell>')
+    return (f'<mxCell id="edge_{i}" value="{escape(e["label"])}" style="{style}" edge="1" parent="1"{attrs}>{geo}</mxGeometry></mxCell>')
 
 
 def to_xml(pages):
