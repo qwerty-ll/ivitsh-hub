@@ -1,33 +1,5 @@
 [
  {
-  "id": "S2-002",
-  "priority": "HIGH",
-  "confidence": "CONFIRMED",
-  "area": "D",
-  "title": "В сводку ПГАС попадают мероприятия без отметки присутствия",
-  "affects": "студент, администрация, комиссия по ПГАС, студент, комиссия",
-  "where": "server/app/routers/achievements.py:125-127 (portfolio_rows), :166-184; server/app/services/pgas.py:82-125; server/app/routers/events.py:392-417 | server/app/routers/achievements.py:125-127 (S3-009)",
-  "summary": "Любой студент записывается на открытое событие института; если организатор не отметил присутствие (attended=None), событие попадает в «Сведения об участии» (Excel/Word, с пометкой портала и названиями документов). Биты требуют attended=True, ПГАС — нет. Почему High: затрагивает стипендию и доверие к документу портала, воспроизводится одним действием; не Critical: решение принимает комиссия, ПД не утекают.",
-  "repro": "cd server && python -m pytest ../docs/audit/poc/s2/test_s2_events_docs.py -q -p no:cacheprovider -k never_marked",
-  "impact": "Студент может набрать строки по всем открытым событиям института за семестр и приложить выгрузку с печатью портала; в честных выгрузках комиссия не отличит неподтверждённые строки.",
-  "fix": "В portfolio_rows включать строку только при attended is True (или помечать «не подтверждено организатором»).",
-  "verify": "Тесты: записан без отметки — нет строки/помечена; attended=True — есть; False — нет.",
-  "effort": "S",
-  "when": "сейчас",
-  "owner_decision": "да — вопрос 1: считать ли неотмеченных присутствовавшими",
-  "contradicts_decision": false,
-  "related": [
-   "S1-006",
-   "S2-004"
-  ],
-  "merged_from": [
-   "S3-009"
-  ],
-  "_extra": [
-   "S3-009: Неотмеченные регистрации прошедших мероприятий попадают в Excel/Word для ПГАС; биты за них не платятся."
-  ]
- },
- {
   "id": "S3-001",
   "priority": "HIGH",
   "confidence": "CONFIRMED",
@@ -37,7 +9,7 @@
   "where": "server/app/services/progress.py:17-34,85-162; routers/homework.py:86-98; routers/forum.py:213-242; routers/meetings.py:179-201; routers/events.py:297-304,560-578",
   "summary": "Единственная защита - потолки за семестр; подтверждающий - сам человек или друг. Мусорные ДЗ/ответы (1 символ), сговор по форуму, собрания/мероприятия руководителя с самоотметкой.",
   "repro": "python docs/audit/poc/s3/poc_bits_farming.py: solo 50 бит; 2 аккаунта 80; руководитель+3 друга 216/116 за секунды",
-  "impact": "Обесценивание магазина и турнира; ~430 бит/сем. на аккаунт",
+  "impact": "Обесценивание магазина и турнира; ~391 бит/сем. на аккаунт",
   "fix": "Считать события после ends_at и длительностью >=30 мин, без самоотметки; мин. длина и подтверждение ДЗ/ответов; кэп на объединение; недельный отчет админу",
   "verify": "tests/test_abuse.py: test_one_char_homework_and_answers_pay_nothing, test_leader_cannot_credit_self_or_unfinished_meeting",
   "effort": "M",
@@ -49,29 +21,9 @@
    "S3-004",
    "S3-011"
   ],
-  "merged_from": []
- },
- {
-  "id": "S3-002",
-  "priority": "HIGH",
-  "confidence": "CONFIRMED",
-  "area": "D/G",
-  "title": "Таблица трайбов: холодный кэш + лавина запросов вешает API",
-  "affects": "все",
-  "where": "server/app/services/tribes.py:60-105; routers/tribes.py:41-62,102-134",
-  "summary": "standings делает ~15 запросов на участника, кэш 300 с без single-flight, сбрасывается при каждом начислении/автовступлении.",
-  "repro": "S3_DATABASE_URL=postgresql://... python docs/audit/poc/s3/poc_tribes_standings_load.py 600 20: холодный расчет 1.3 с; 20 параллельных 27 с; форум во время лавины 20 с",
-  "impact": "Недоступность портала в момент открытия турнира",
-  "fix": "Single-flight замок + stale-while-revalidate; SQL-агрегат или фоновый пересчет; не сбрасывать кэш при автовступлении",
-  "verify": "poc_tribes_standings_load.py 600 20: <=3 с; test_standings_computed_once_under_parallel_requests",
-  "effort": "M",
-  "when": "сейчас",
-  "owner_decision": "да: Q7",
-  "contradicts_decision": false,
-  "related": [
-   "S3-001"
-  ],
-  "merged_from": []
+  "merged_from": [],
+  "audit_priority": "HIGH",
+  "lead_note": "Подтверждено независимо (test_r3_bits.py, другой порядок запросов): руководитель 216 бит, участник 116 за семестр; потолки работают, откат даты на сутки разрешён намеренно (LEADER_BACKDATE), на двое суток — 400. Одиночный путь (50 бит из ДЗ и ответов) — Low по масштабу; сумма потолков без институтских событий 391, а не «~430»."
  },
  {
   "id": "S4-001",
@@ -107,7 +59,7 @@
   "affects": "оператор, все",
   "where": "infrastructure/DEPLOYMENT_GUIDE.md:10-23 (раздел 0); .env.example:4; git-история (проверено целиком, 106 коммитов, все ветки)",
   "summary": "Руководство утверждает, что в истории публичного репозитория остались ключ GigaChat, несколько SECRET_KEY, пароль администратора, пароль PostgreSQL и файл backend/portal.db (коммит eb5a634). В этом репозитории я такого не нашёл: коммита eb5a634 нет, объектов .db/.env/.pem(кроме публичных CA)/дампов нет, в .env.example только пустые значения и заглушки. Значит либо история уже вычищена, либо речь о старом CombinedPortal. В обоих случаях из кода нельзя понять, ротированы ли секреты, и приватен ли исходный репозиторий (руководство пишет «публичного», ROADMAP — «приватный»).",
-  "repro": "Полный скан истории: `git log --all -p` + grep по SECRET_KEY/PASSWORD/TOKEN/AUTH_KEY, JWT, bcrypt-хэшам, BEGIN PRIVATE KEY, base64>=44, UUID; `git log --all --diff-filter=A --name-only`; `git rev-list --all --objects`. Результат: реальных секретов нет (см. список «найдено в истории» ниже). Что осталось: слабые умолчания прошлого — `ADMIN_PASSWORD: demo***` в docker-compose.yml и entrypoint.sh (коммиты 48d0c48…f79e8fa, 24.09.2026), `POSTGRES_PASSWORD: port***` в infrastructure/docker-compose.yml (до c65c3f8), логин/пароль демо `25-isbo-011` / `demo***` в старой документации; служебные промпты в ForSearch/*.txt (удалены в 6734549, секретов не содержат); адреса почты авторов (inbox.ru, users.noreply.github.com) в метаданных коммитов.",
+  "repro": "Полный скан истории: `git log --all -p` + grep по SECRET_KEY/PASSWORD/TOKEN/AUTH_KEY, JWT, bcrypt-хэшам, BEGIN PRIVATE KEY, base64>=44, UUID; `git log --all --diff-filter=A --name-only`; `git rev-list --all --objects`. Результат: реальных секретов нет (см. список «найдено в истории» ниже). Что осталось: слабые умолчания прошлого — `ADMIN_PASSWORD: demo***` в docker-compose.yml и entrypoint.sh (коммиты 48d0c48…f79e8fa, 24.09.2026), `POSTGRES_PASSWORD: port***` в infrastructure/docker-compose.yml (до c65c3f8), логин/пароль демо `25-i***` / `demo***` в старой документации; служебные промпты в ForSearch/*.txt (удалены в 6734549, секретов не содержат); адреса почты авторов (inbox.ru, users.noreply.github.com) в метаданных коммитов.",
   "impact": "Если ключ GigaChat, SECRET_KEY (подделка любой сессии, в том числе admin), ADMIN_PASSWORD или пароль БД из старой копии не заменены, это полный обход защиты и чужие траты по ключу GigaChat. Подтвердить нечем — нужен ответ владельца.",
   "fix": "Владелец подтверждает: (1) что GigaChat-ключ, SECRET_KEY, ADMIN_PASSWORD, POSTGRES_PASSWORD (с ALTER USER, см. S4-014) заменены на проде после 24.09.2026; (2) что CombinedPortal закрыт или тоже вычищен; (3) что владелец portal.db сменил пароль ЭИОС. Добавить gitleaks в CI (см. S4-013). Обновить раздел 0 руководства под реальность (убрать ссылку на несуществующий коммит или пометить «выполнено, дата»).",
   "verify": "`gitleaks detect --log-opts='--all'` по ivitsh-hub и CombinedPortal даёт 0; письменное подтверждение ротации с датами.",
@@ -148,38 +100,6 @@
   "merged_from": []
  },
  {
-  "id": "S5-001",
-  "priority": "HIGH",
-  "confidence": "CONFIRMED",
-  "area": "B/E",
-  "title": "ФИО и внутренний id студентов, писавших на форуме, отдаются любому посетителю без входа",
-  "affects": "студент, все студенты, студент (ПД)",
-  "where": "server/app/routers/forum.py:19-96 (GET /forum/questions: author_id, author_name, фильтр author_id), :150-175 (детали вопроса), :183-210 (ответы); server/app/schemas/schemas.py ForumQuestionResponse/ForumAnswerResponse; client/src/pages/QuestionDetail.jsx:64-69 (formatAuthorName); Privacy.jsx, раздел «Какие данные и зачем» | server/app/routers/forum.py:19-99,135-180,183-210; routers/associations.py:112-137 (S1-004) | server/app/routers/forum.py:19-28,135-210,151-154 (S3-010) | server/app/db/seeds/associations.json (leader_hint); server/main.py:35-48 (seed); server/app/routers/associations.py:134 (listed_leader в публичном GET /associations); associations.py:350-365 (_hint_matches для админа) (S5-011)",
-  "summary": "Эндпоинты чтения форума не требуют входа и возвращают настоящее ФИО автора из ЭИОС и его user id. По author_id можно собрать все записи одного человека. Если ЭИОС не дал имя, вместо него показывается «Студент <логин ЭИОС>». В политике сказано только «то, что вы публикуете сами», но не что имя видно всему интернету; robots.txt и noindex нет.",
-  "repro": "cd server && python -m pytest ../docs/audit/poc/s5/test_s5_privacy.py -q -s -p no:cacheprovider -k e1  (аноним без cookie: GET /api/v1/forum/questions -> 200, author_name='Смирнова Анна Олеговна', author_id=1; GET ...?author_id=1 перечисляет все её записи)",
-  "impact": "Любой может выгрузить ФИО студентов ИВИТШ, писавших на форуме, и связать их с вопросами (в т.ч. о долгах, справках, здоровье). Для студента это раскрытие вне круга портала без его осознанного решения; для вуза - претензия по 152-ФЗ.",
-  "fix": "Для анонимного запроса отдавать author_name в виде «Анна С.» или «Студент» и не отдавать author_id; убрать фильтр author_id для анонима; fallback «Студент <логин>» заменить на «Студент». Либо закрыть чтение форума входом. Добавить X-Robots-Tag: noindex в nginx и строку о видимости имени в Privacy.jsx (и поднять версию согласия).",
-  "verify": "Новый тест в server/tests/test_forum.py: аноним получает author_name без фамилии целиком и без author_id; вошедший - как сейчас. PoC S5 test_e1_* должен упасть/быть переписан на отрицательное утверждение.",
-  "effort": "S",
-  "when": "сейчас",
-  "owner_decision": "да - вопрос 3: оставить форум открытым с сокращённым именем / только для вошедших / как есть + предупреждение",
-  "contradicts_decision": "нет (решение «форум остаётся» не затрагивается)",
-  "related": [
-   "S1-008",
-   "S5-010"
-  ],
-  "merged_from": [
-   "S1-004",
-   "S3-010",
-   "S5-011"
-  ],
-  "_extra": [
-   "S1-004: Форум и каталог открыты без входа; в ответах реальные ФИО, внутренний user_id, группа руководителей; фильтр author_id позволяет перебор.",
-   "S3-010: get_current_user необязателен; каждый GET увеличивает views_count.",
-   "S5-011: Фамилия и имя руководителей объединений зашиты в сид (репозиторий приватный, но имена - ПД) и публикуются в каталоге любому посетителю, пока человек не вошёл и не согласился. Контакты не раскрываются."
-  ]
- },
- {
   "id": "S1-001",
   "priority": "MEDIUM",
   "confidence": "CONFIRMED",
@@ -200,7 +120,9 @@
    "S1-002",
    "S1-013"
   ],
-  "merged_from": []
+  "merged_from": [],
+  "audit_priority": "MEDIUM",
+  "lead_note": "Независимая проверка (r5_login_burst.py, test_r5_eios_burst.py) подтвердила обход лимита, но повышение до High опровергнуто: реальный потолок задают пул потоков и nginx — ~11 догадок за окно на админ-вход (до ~40 при распределённом), ~61 на логин ЭИОС вместо 5; пока админ ни разу не входил, обход не работает; перебор пароля прямо в ЭИОС возможен и без портала."
  },
  {
   "id": "S1-002",
@@ -388,7 +310,9 @@
   "_extra": [
    "S4-005: Любой анонимный посетитель может заставить портал сделать запрос в ЭИОС с произвольными параметрами: каждый новый набор = исходящий запрос с IP портала. Если ЭИОС не ответила, повтор того же запроса снова идёт наружу. После истечения TTL N одновременных пользователей дают N одинаковых запросов. Заполнив кэш 2000 разными ключами, можно выбросить из него общие списки групп/преподавателей (они самые старые).",
    "S6-002: Любой аноним может слать запросы с разными sdate/idGroup, и каждый уходит в ЭИОС (кэш не помогает). Лимит nginx 50 r/s на IP — это до 50 обращений в секунду к ЭИОС с адреса портала. В кэше до 2000 больших ответов в памяти одного процесса."
-  ]
+  ],
+  "audit_priority": "MEDIUM",
+  "lead_note": "Независимая проверка (r6): 600 разных idGroup — 600 вызовов в ЭИОС; nginx ограничивает лишь поток (~50 запросов/с с IP), отдельного лимита на /schedule нет. Станет High, если владелец ЭИОС подтвердит бан по IP (вопрос 21)."
  },
  {
   "id": "S2-001",
@@ -411,6 +335,36 @@
    "S2-009"
   ],
   "merged_from": []
+ },
+ {
+  "id": "S2-002",
+  "priority": "MEDIUM",
+  "confidence": "CONFIRMED",
+  "area": "D",
+  "title": "В сводку ПГАС попадают мероприятия без отметки присутствия",
+  "affects": "студент, администрация, комиссия по ПГАС, студент, комиссия",
+  "where": "server/app/routers/achievements.py:125-127 (portfolio_rows), :166-184; server/app/services/pgas.py:82-125; server/app/routers/events.py:392-417 | server/app/routers/achievements.py:125-127 (S3-009)",
+  "summary": "Любой студент записывается на открытое событие института; если организатор не отметил присутствие (attended=None), событие попадает в «Сведения об участии» (Excel/Word, с пометкой портала и названиями документов). Биты требуют attended=True, ПГАС — нет. Почему High: затрагивает стипендию и доверие к документу портала, воспроизводится одним действием; не Critical: решение принимает комиссия, ПД не утекают.",
+  "repro": "cd server && python -m pytest ../docs/audit/poc/s2/test_s2_events_docs.py -q -p no:cacheprovider -k never_marked",
+  "impact": "Студент может набрать строки по всем открытым событиям института за семестр и приложить выгрузку с печатью портала; в честных выгрузках комиссия не отличит неподтверждённые строки.",
+  "fix": "В portfolio_rows включать строку только при attended is True (или помечать «не подтверждено организатором»).",
+  "verify": "Тесты: записан без отметки — нет строки/помечена; attended=True — есть; False — нет.",
+  "effort": "S",
+  "when": "сейчас",
+  "owner_decision": "да — вопрос 1: считать ли неотмеченных присутствовавшими",
+  "contradicts_decision": false,
+  "related": [
+   "S1-006",
+   "S2-004"
+  ],
+  "merged_from": [
+   "S3-009"
+  ],
+  "_extra": [
+   "S3-009: Неотмеченные регистрации прошедших мероприятий попадают в Excel/Word для ПГАС; биты за них не платятся."
+  ],
+  "audit_priority": "HIGH",
+  "lead_note": "Независимая проверка (test_r2_pgas.py): поведение воспроизведено (3 события без отметки попадают в личную выгрузку ПГАС и в portfolio), но оно задумано кодом: achievements.py:125 «Unmarked counts as present: not every organizer marks attendance», исключается только attended=False; тест test_events.py. Понижено с High до Medium: остаётся вопрос владельцу (вопрос 2) и неразличимость подтверждённых и неподтверждённых строк для комиссии."
  },
  {
   "id": "S2-003",
@@ -575,6 +529,30 @@
    "S2-002"
   ],
   "merged_from": []
+ },
+ {
+  "id": "S3-002",
+  "priority": "MEDIUM",
+  "confidence": "CONFIRMED",
+  "area": "D/G",
+  "title": "Таблица трайбов: холодный кэш + лавина запросов вешает API",
+  "affects": "все",
+  "where": "server/app/services/tribes.py:60-105; routers/tribes.py:41-62,102-134",
+  "summary": "standings делает ~15 запросов на участника, кэш 300 с без single-flight, сбрасывается при каждом начислении/автовступлении.",
+  "repro": "S3_DATABASE_URL=postgresql://... python docs/audit/poc/s3/poc_tribes_standings_load.py 600 20: холодный расчет 1.3 с; 20 параллельных 27 с; форум во время лавины 20 с",
+  "impact": "Недоступность портала в момент открытия турнира",
+  "fix": "Single-flight замок + stale-while-revalidate; SQL-агрегат или фоновый пересчет; не сбрасывать кэш при автовступлении",
+  "verify": "poc_tribes_standings_load.py 600 20: <=3 с; test_standings_computed_once_under_parallel_requests",
+  "effort": "M",
+  "when": "сейчас",
+  "owner_decision": "да: Q7",
+  "contradicts_decision": false,
+  "related": [
+   "S3-001"
+  ],
+  "merged_from": [],
+  "audit_priority": "HIGH",
+  "lead_note": "Независимая проверка (test_r4_tribes_queries.py, r4_load.py; PostgreSQL 16, один воркер, 600 студентов): ~7 запросов на участника (15 только при переходе семестра); 5 параллельных холодных запросов — 12,8 с, 20 — 49 с; но посторонние эндпоинты замедляются до 1–2 с, а не до 27 с, и страница грузится только по заходу пользователя. Понижено с High до Medium; нужен single-flight и пересчёт без 7 запросов на человека."
  },
  {
   "id": "S3-003",
@@ -827,6 +805,40 @@
    "S4-003"
   ],
   "merged_from": []
+ },
+ {
+  "id": "S5-001",
+  "priority": "MEDIUM",
+  "confidence": "CONFIRMED",
+  "area": "B/E",
+  "title": "ФИО и внутренний id студентов, писавших на форуме, отдаются любому посетителю без входа",
+  "affects": "студент, все студенты, студент (ПД)",
+  "where": "server/app/routers/forum.py:19-96 (GET /forum/questions: author_id, author_name, фильтр author_id), :150-175 (детали вопроса), :183-210 (ответы); server/app/schemas/schemas.py ForumQuestionResponse/ForumAnswerResponse; client/src/pages/QuestionDetail.jsx:64-69 (formatAuthorName); Privacy.jsx, раздел «Какие данные и зачем» | server/app/routers/forum.py:19-99,135-180,183-210; routers/associations.py:112-137 (S1-004) | server/app/routers/forum.py:19-28,135-210,151-154 (S3-010) | server/app/db/seeds/associations.json (leader_hint); server/main.py:35-48 (seed); server/app/routers/associations.py:134 (listed_leader в публичном GET /associations); associations.py:350-365 (_hint_matches для админа) (S5-011)",
+  "summary": "Эндпоинты чтения форума не требуют входа и возвращают настоящее ФИО автора из ЭИОС и его user id. По author_id можно собрать все записи одного человека. Если ЭИОС не дал имя, вместо него показывается «Студент <логин ЭИОС>». В политике сказано только «то, что вы публикуете сами», но не что имя видно всему интернету; robots.txt и noindex нет.",
+  "repro": "cd server && python -m pytest ../docs/audit/poc/s5/test_s5_privacy.py -q -s -p no:cacheprovider -k e1  (аноним без cookie: GET /api/v1/forum/questions -> 200, author_name='Смирнова Анна Олеговна', author_id=1; GET ...?author_id=1 перечисляет все её записи)",
+  "impact": "Любой может выгрузить ФИО студентов ИВИТШ, писавших на форуме, и связать их с вопросами (в т.ч. о долгах, справках, здоровье). Для студента это раскрытие вне круга портала без его осознанного решения; для вуза - претензия по 152-ФЗ.",
+  "fix": "Для анонимного запроса отдавать author_name в виде «Анна С.» или «Студент» и не отдавать author_id; убрать фильтр author_id для анонима; fallback «Студент <логин>» заменить на «Студент». Либо закрыть чтение форума входом. Добавить X-Robots-Tag: noindex в nginx и строку о видимости имени в Privacy.jsx (и поднять версию согласия).",
+  "verify": "Новый тест в server/tests/test_forum.py: аноним получает author_name без фамилии целиком и без author_id; вошедший - как сейчас. PoC S5 test_e1_* должен упасть/быть переписан на отрицательное утверждение.",
+  "effort": "S",
+  "when": "сейчас",
+  "owner_decision": "да - вопрос 3: оставить форум открытым с сокращённым именем / только для вошедших / как есть + предупреждение",
+  "contradicts_decision": "нет (решение «форум остаётся» не затрагивается)",
+  "related": [
+   "S1-008",
+   "S5-010"
+  ],
+  "merged_from": [
+   "S1-004",
+   "S3-010",
+   "S5-011"
+  ],
+  "_extra": [
+   "S1-004: Форум и каталог открыты без входа; в ответах реальные ФИО, внутренний user_id, группа руководителей; фильтр author_id позволяет перебор.",
+   "S3-010: get_current_user необязателен; каждый GET увеличивает views_count.",
+   "S5-011: Фамилия и имя руководителей объединений зашиты в сид (репозиторий приватный, но имена - ПД) и публикуются в каталоге любому посетителю, пока человек не вошёл и не согласился. Контакты не раскрываются."
+  ],
+  "audit_priority": "HIGH",
+  "lead_note": "Независимая проверка (docs/audit/poc/refute/test_r1_anon_pd.py): ФИО и author_id аноним получает, `?author_id=` перечисляет все записи автора, но форум задуман читаемым без входа (client/src/pages/Forum.jsx:258; ROADMAP «Форум: оставляем»), это не обход прав. Понижено с High до Medium: реальная проблема — публикация ФИО с внутренним id и фильтром по автору без упоминания в Privacy.jsx; каталог руководителей (ФИО, группа, user_id у гостя) — задуман (test_associations.py:43), контакты скрыты, поэтому эта часть Low. Решение владельца: вопрос 1."
  },
  {
   "id": "S5-002",
